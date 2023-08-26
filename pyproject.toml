@@ -2,16 +2,16 @@
 requires = ["flit_core >=2,<4"]
 build-backend = "flit_core.buildapi"
 
-[project]
-name = "takt"
-description = "A command line tool to track time."
-authors = ["Max Greco <mmngreco@gmail.com>"]
-license = "MIT"
-readme = "README.md"
-
 [tool.flit.metadata]
+module = "takt"
+author = "Max Greco <mmngreco@gmail.com>"
+author-email = "mmngreco@gmail.com"
+home-page = "https://github.com/mmngreco/takt"
+description-file = "README.md"
 requires = ["rich", "typer"]
 requires-python = ">=3.6"
+license = "MIT"
 
 [tool.flit.scripts]
-takt = "takt:main"
+takt = "takt:takt"
+

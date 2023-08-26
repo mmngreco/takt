@@ -1,3 +1,39 @@
+"""
+takt: A Command Line Time Tracking Tool
+=======================================
+
+This module provides a command line interface (CLI) tool for tracking time spent on various tasks.
+
+Features
+--------
+- Start a timer for a task
+- Stop the current task and log the time
+- List all tasks and their total time
+- Delete a task
+
+Usage
+-----
+From the command line:
+
+    $ takt start "Task Name"
+    $ takt stop
+    $ takt list
+    $ takt delete "Task Name"
+
+Dependencies
+------------
+- rich: For pretty console output
+- typer: For parsing command line arguments
+
+Authors
+-------
+- Max Greco (mmngreco@gmail.com)
+
+License
+-------
+MIT License
+
+"""
 import csv
 import os
 import subprocess
