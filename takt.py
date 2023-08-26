@@ -44,6 +44,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+
 app = typer.Typer()
 console = Console()
 
@@ -138,6 +139,9 @@ def summary(filename: str = 'records.csv'):
 
 @app.command()
 def clear(filename: str = FILE_NAME):
+    """
+    Remove all records from the records file.
+    """
     with open(filename, 'w', newline='') as _:
         pass
     console.print("All records have been cleared.", style="red")
@@ -145,6 +149,9 @@ def clear(filename: str = FILE_NAME):
 
 @app.command()
 def edit(filename: str = FILE_NAME):
+    """
+    Edit the records file.
+    """
     editor = os.environ.get(
         'EDITOR', 'vim'
     )  # Usar vim como editor predeterminado si EDITOR no está definido
@@ -156,7 +163,7 @@ def edit(filename: str = FILE_NAME):
 @app.command("import")
 def import_csv(source: str, target: str = FILE_NAME):
     """
-    Importa registros desde un archivo CSV a otro.
+    Import records from source to target.
     """
     try:
         source_records = load_csv(source)
@@ -167,7 +174,6 @@ def import_csv(source: str, target: str = FILE_NAME):
 
     except Exception as e:
         console.print(f"Error: {e}", style="red")
-
 
 if __name__ == "__main__":
     app()
