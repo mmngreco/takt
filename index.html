@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Check In/Out</title>
+    <script src="https://unpkg.com/htmx.org@latest"></script>
+    <script src="https://unpkg.com/alasql@latest"></script>
+    <style>
+    body {
+        background-color: #282c34;
+        color: #abb2bf;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+    button {
+        background-color: #3e4451;
+        border: none;
+        color: #61afef;
+        padding: 12px 24px;
+        text-align: center;
+        cursor: pointer;
+        margin: 8px;
+        border-radius: 4px;
+    }
+    button:hover {
+        background-color: #2c313c;
+    }
+    h2 {
+        border-bottom: 2px solid #3e4451;
+        padding-bottom: 10px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th, td {
+        padding: 8px;
+        text-align: left;
+        border-bottom: 1px solid #3e4451;
+    }
+    select, input[type="text"] {
+        background-color: #3e4451;
+        color: #61afef;
+        border: none;
+        padding: 10px;
+        margin: 8px;
+        border-radius: 4px;
+    }
+    #status, #sqlResult {
+        background-color: #3e4451;
+        padding: 12px;
+        border-radius: 4px;
+        margin-top: 16px;
+    }
+    </style>
+
+</head>
+<body>
+    <h1>Check In/Out</h1>
+    <h2>Status</h2>
+    <div id="status"></div>
+
+    <button onclick="check()">Check In/Out</button>
+    <button onclick="exportData()">Export Data</button>
+    <input type="file" id="import" style="display: none" onchange="importData()" />
+    <button onclick="document.getElementById('import').click()">Import Data</button>
+    <select id="format">
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+    </select>
+    <button onclick="clearAll()">Clear All</button>
+
+    <h2>Summary</h2>
+    <div id="summary"></div>
+
+    <h2>Records</h2>
+    <div id="records"></div>
+
+    <h2>SQL Query</h2>
+    <input type="text" id="sql" />
+    <button onclick="runSql()">Run</button>
+    <div id="sqlResult"></div>
+
+
+    <script>
+
+        function toLocalISOString(date) {
+            const offset = date.getTimezoneOffset() * 60000; // offset en milisegundos
+            const localISOString = new Date(date - offset).toISOString().slice(0, -1); // eliminamos la 'Z' final
+            return localISOString;
+        }
+
+        function fromLocalISOString(localISOString) {
+            const date = new Date(localISOString);
+            const offset = date.getTimezoneOffset() * 60000;
+            return new Date(date.getTime() + offset);
+        }
+
+        function parseDateToIso(date) {
+            return toLocalISOString(date);
+        }
+
+        function parseIsoToDate(isoString) {
+            return fromLocalISOString(isoString)
+        }
+
+        function newIsoDate() {
+            return toLocalISOString(new Date());
+        }
+
+
+        function check() {
+            const timestamp = parseDateToIso(new Date());
+            const records = JSON.parse(localStorage.getItem('records') || '[]');
+            const type = (records[0] && records[0].type === 'in') ? 'out' : 'in';
+            records.unshift({ type, timestamp });
+            localStorage.setItem('records', JSON.stringify(records));
+            document.getElementById('status').textContent = `Check ${type} at ${new Date(timestamp).toLocaleString()}`;
+            displayRecords();
+            displaySummary();
+        }
+
+        function displayRecords() {
+            const records = JSON.parse(localStorage.getItem('records') || '[]');
+            let html = '<table>';
+            records.slice(0, 10).forEach((record) => {
+                html += `<tr><td>${record.type}</td><td>${record.timestamp}</td></tr>`;
+            });
+            html += '</table>';
+            document.getElementById('records').innerHTML = html;
+        }
+
+        function displaySummary() {
+            const records = JSON.parse(localStorage.getItem('records') || '[]');
+            const summary = {};
+            let day, inTime, outTime;
+
+            records.forEach((record) => {
+                day = parseIsoToDate(record.timestamp).toISOString().slice(0, 10);
+                if (record.type === 'in') {
+                    inTime = record.timestamp;
+                    if (inTime && outTime) {
+                        summary[day] = (summary[day] || 0) + ((parseIsoToDate(outTime).getTime() - parseIsoToDate(inTime).getTime()) / (1000 * 60 * 60));
+                        inTime = outTime = null;
+                    }
+                } else {
+                    outTime = record.timestamp;
+                }
+            });
+
+            let html = '<table>';
+            for (const [day, time] of Object.entries(summary)) {
+                html += `<tr><td>${day}</td><td>${time.toFixed(2)} hours</td></tr>`;
+            }
+            html += '</table>';
+            document.getElementById('summary').innerHTML = html;
+        }
+
+        function exportData() {
+            const records = JSON.parse(localStorage.getItem('records') || '[]');
+            const format = document.getElementById('format').value;
+            let dataStr, downloadAnchorNode;
+            if (format === 'json') {
+                dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records));
+                downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href",     dataStr);
+                downloadAnchorNode.setAttribute("download", "records.json");
+            } else {
+                let csv = 'type,timestamp\n';
+                records.forEach((record) => {
+                    csv += `${record.type},${record.timestamp}\n`;
+                });
+                dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csv);
+                downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href",     dataStr);
+                downloadAnchorNode.setAttribute("download", "records.csv");
+            }
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            document.getElementById('status').textContent = `Data exported as ${format.toUpperCase()} at ${newIsoDate()}`;
+        }
+
+        function importData() {
+            const file = document.getElementById('import').files[0];
+            const format = document.getElementById('format').value;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                let records = [];
+                if (format === 'json') {
+                    records = JSON.parse(event.target.result);
+                } else {
+                    const lines = event.target.result.split('\n');
+                    let counter = 0
+                    for (const line of lines.slice(1)) {
+                        const [type, timestamp] = line.split(',');
+                        if (type && timestamp) {
+                            records.push({
+                                type,
+                                timestamp: timestamp.trim()  // Asume que la fecha ya está en el formato correcto (ISO 8601)
+                            });
+                        } else {
+                            console.error(`Wrong line: ${counter}: '${line}'`);
+                        }
+                        counter += 1
+                    }
+                }
+                localStorage.setItem('records', JSON.stringify(records));
+                displayRecords();
+                displaySummary();
+                document.getElementById('status').textContent = `Data imported at ${newIsoDate()}`;
+            };
+            reader.readAsText(file);
+        }
+
+        function runSql() {
+            const records = JSON.parse(localStorage.getItem('records') || '[]');
+            const sql = document.getElementById('sql').value;
+            const result = alasql(sql, [records]);
+            const formattedJson = JSON.stringify(result, null, 2);
+            const htmlFriendlyJson = formattedJson
+                .replace(/ /g, '&nbsp;')
+                .replace(/\n/g, '<br>');
+            document.getElementById('sqlResult').innerHTML = htmlFriendlyJson;
+        }
+
+        function clearAll() {
+            // Eliminar todo de localStorage
+            localStorage.clear();
+
+            // Actualizar la vista para reflejar que todo se ha eliminado
+            document.getElementById('records').innerHTML = '';
+            document.getElementById('summary').innerHTML = '';
+            document.getElementById('status').textContent = 'All data has been cleared.';
+            document.getElementById('sqlResult').textContent = '';
+        }
+
+
+        displayRecords();
+        displaySummary();
+        setInterval(() => {
+            displayRecords();
+            displaySummary();
+        }, 10000);
+
+    </script>
+</body>
+</html>
