@@ -1,0 +1,17 @@
+[build-system]
+requires = ["flit_core >=2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "takt"
+description = "A command line tool to track time."
+authors = ["Max Greco <mmngreco@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.flit.metadata]
+requires = ["rich", "typer"]
+requires-python = ">=3.6"
+
+[tool.flit.scripts]
+takt = "takt:main"
