@@ -1,26 +1,32 @@
 VERSION := $(shell git describe --tags)
 
-update_version:
+help: ## print help
+	@echo "Makefile help"
+	@echo "Usage: make [target]"
+	@echo "Targets:"
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "    \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+update_version: ## Update the version in pyproject.toml to the latest git tag
 	sed -i 's/version = .*/version = "$(VERSION)"/' pyproject.toml
 
-build: update_version
+build: update_version ## Update the version and build the package
 	flit build
 
-install: build
+install: build ## Build the package and install it
 	pip install dist/tu_paquete-$(VERSION)-py3-none-any.whl
 
-dev: update_version
+dev: update_version ## Update the version and install the package in editable mode
 	pip install -e .
 
-publish: build
+publish: build ## Build the package and publish it
 	flit publish
 
-info:
+info: ## Print the current version
 	@echo version: $(VERSION)
 	@echo v: $(v)
 
-tag:
+tag: ## Create a new git tag with the specified version and update pyproject.toml
 	git tag -a $(v) -m "version $(v)"
 	$(MAKE) update_version
 
-.PHONY: update_version build install dev publish info
+.PHONY: update_version build install dev publish info help
