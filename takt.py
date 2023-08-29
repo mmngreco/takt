@@ -51,13 +51,24 @@ console = Console()
 DEFAULT_FILE = '~/.takt_file.csv'
 FILE_NAME = os.path.expanduser(os.getenv('TAKT_FILE', DEFAULT_FILE))
 
-COLUMNS = (
+COLUMNS = [
     'timestamp',  # as index in table method
     'kind',
     'notes',
-)
+]
 KIND = 1
 INDEX = 0
+
+
+def strip_col(df):
+    for c in df.columns:
+        try:
+            df[c] = df[c].str.strip()
+        except AttributeError:
+            pass
+
+    return df
+
 
 class FileManager:
     columns = COLUMNS
@@ -65,10 +76,16 @@ class FileManager:
     def __init__(self, filename):
         self.filename = filename
 
-    def load(self, nlines=None):
-        data = pd.read_csv(self.filename)
-        if nlines is not None:
-            data = data.head(nlines)
+    def read(self, nrows=None):
+        data = pd.read_csv(self.filename, nrows=nrows)
+        # clean trailing spaces
+        data.columns = data.columns.str.strip()
+        data = data[self.columns]
+        data = strip_col(data)
+        return data
+
+    def load(self, nrows=None):
+        data = self.read(nrows=nrows)
         return data.to_dict('records')
 
     def save(self, records):
@@ -86,8 +103,8 @@ class FileManager:
         return data
 
     def first_row(self):
-        data = pd.read_csv(self.filename)
-        return data.head(1).to_dict('records')
+        data = self.read(nrows=1)
+        return data.to_dict('records')[0]
 
     def import_from(self, source_filename):
         source_data = pd.read_csv(source_filename)
@@ -99,7 +116,7 @@ class FileManager:
 @app.command()
 def check(notes: str = "", filename: str = FILE_NAME):
     file_manager = FileManager(filename)
-    last_kind = file_manager.first_row()[0][COLUMNS[KIND]]
+    last_kind = file_manager.first_row()[COLUMNS[KIND]]
     # build record
     timestamp = datetime.now().isoformat()
     kind = 'out' if last_kind == 'in' else 'in'
@@ -187,8 +204,9 @@ def edit(filename: str = FILE_NAME):
     Edit the records file.
     """
     editor = os.environ.get(
-        'EDITOR', 'vim'
-    )  # Usar vim como editor predeterminado si EDITOR no está definido
+        'EDITOR',
+        'vim',  # Vim by default
+    )
     try:
         subprocess.run([editor, filename])
     except FileNotFoundError:
