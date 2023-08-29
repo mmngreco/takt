@@ -38,7 +38,7 @@ MIT License
 import os
 import subprocess
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import typer
@@ -51,16 +51,18 @@ console = Console()
 DEFAULT_FILE = '~/.takt_file.csv'
 FILE_NAME = os.path.expanduser(os.getenv('TAKT_FILE', DEFAULT_FILE))
 
+TIMESTAMP = "timestamp"
+KIND = "kind"
+NOTES = "notes"
 COLUMNS = [
-    'timestamp',  # as index in table method
-    'kind',
-    'notes',
+    TIMESTAMP,
+    KIND,
+    NOTES,
 ]
-KIND = 1
-INDEX = 0
 
 
-def strip_col(df):
+def strip_values(df: pd.DataFrame) -> pd.DataFrame:
+    df.columns = df.columns.str.strip()
     for c in df.columns:
         try:
             df[c] = df[c].str.strip()
@@ -79,9 +81,7 @@ class FileManager:
     def read(self, nrows=None):
         data = pd.read_csv(self.filename, nrows=nrows)
         # clean trailing spaces
-        data.columns = data.columns.str.strip()
-        data = data[self.columns]
-        data = strip_col(data)
+        data = strip_values(data)[self.columns]
         return data
 
     def load(self, nrows=None):
@@ -89,20 +89,19 @@ class FileManager:
         return data.to_dict('records')
 
     def save(self, records):
-        data = pd.DataFrame(records)
+        data = pd.DataFrame(records)[self.columns]
         data.to_csv(self.filename, index=False)
 
-    def insert(self, timestamp, kind, notes):
+    def insert(self, **kwargs):
         records = self.load()
-        record = dict(kind=kind, timestamp=timestamp, notes=notes)
-        records.insert(0, record)
+        records.insert(0, kwargs)
         self.save(records)
 
     def table(self):
         data = pd.read_csv(self.filename)
         return data
 
-    def first_row(self):
+    def first(self):
         data = self.read(nrows=1)
         return data.to_dict('records')[0]
 
@@ -116,12 +115,18 @@ class FileManager:
 @app.command()
 def check(notes: str = "", filename: str = FILE_NAME):
     file_manager = FileManager(filename)
-    last_kind = file_manager.first_row()[COLUMNS[KIND]]
+    last_kind = file_manager.first()[KIND]
     # build record
     timestamp = datetime.now().isoformat()
     kind = 'out' if last_kind == 'in' else 'in'
     # insert record
-    file_manager.insert(kind=kind, timestamp=timestamp, notes=notes)
+    file_manager.insert(
+        **{
+            TIMESTAMP: timestamp,
+            KIND: kind,
+            NOTES: notes,
+        }
+    )
     console.print(f"Check {kind} at {timestamp}", style="green")
 
 
@@ -143,12 +148,12 @@ def summary(filename: str = FILE_NAME):
     last_out_time = None
 
     # Check if the first record is 'in' and add a current 'out' record
-    if records and records[0]['kind'] == 'in':
+    if records and records[0][KIND] == 'in':
         records.insert(
             0,
             {
-                'kind': 'out',
-                'timestamp': datetime.now().isoformat(),
+                KIND: 'out',
+                TIMESTAMP: datetime.now().isoformat(),
             },
         )
         console.print(
@@ -157,8 +162,8 @@ def summary(filename: str = FILE_NAME):
         )
 
     for record in records:
-        kind = record['kind']
-        timestamp = datetime.fromisoformat(record['timestamp'])
+        kind = record[KIND]
+        timestamp = datetime.fromisoformat(record[TIMESTAMP])
         day = (
             timestamp.date().isoformat()
         )  # Extract just the day (in ISO format)
@@ -179,11 +184,13 @@ def summary(filename: str = FILE_NAME):
 
     # Now let's display the summary using Rich's Table
     table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Day", style="dim", width=20)
-    table.add_column("Hours", style="dim", width=10)
+    table.add_column("Day", style="dim")
+    table.add_column("Hours", style="dim")
 
     for day, hours in summary_dict.items():
-        table.add_row(day, f"{hours:.2f}")
+        h = int(hours)
+        m = int((hours - h) * 60)
+        table.add_row(day, f"{h}:{m}")
 
     console.print(table)
 
