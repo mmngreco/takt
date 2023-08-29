@@ -35,28 +35,29 @@ License
 MIT License
 
 """
-import csv
 import os
 import subprocess
 from collections import defaultdict
 from datetime import datetime
 
+import pandas as pd
 import typer
 from rich.console import Console
 from rich.table import Table
-
 
 app = typer.Typer()
 console = Console()
 
 DEFAULT_FILE = '~/.takt_file.csv'
 FILE_NAME = os.path.expanduser(os.getenv('TAKT_FILE', DEFAULT_FILE))
+
 COLUMNS = (
-    'timestamp',
-    'type',
+    'timestamp',  # as index in table method
+    'kind',
     'notes',
 )
-
+KIND = 1
+INDEX = 0
 
 class FileManager:
     columns = COLUMNS
@@ -65,62 +66,46 @@ class FileManager:
         self.filename = filename
 
     def load(self, nlines=None):
-        with open(self.filename, 'r') as f:
-            reader = csv.reader(f)
-            header = [h.strip() for h in next(reader)]
-            data = []
-            for i, row in enumerate(reader):
-                if nlines is not None and i >= nlines:
-                    break
-                row = [item.strip() for item in row]
-                record = dict(zip(header, row))
-                data.append(record)
-        return data
+        data = pd.read_csv(self.filename)
+        if nlines is not None:
+            data = data.head(nlines)
+        return data.to_dict('records')
 
     def save(self, records):
-        with open(self.filename, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=self.columns)
-            writer.writeheader()
-            for record in records:
-                writer.writerow(record)
+        data = pd.DataFrame(records)
+        data.to_csv(self.filename, index=False)
 
-    def insert(self, *record):
+    def insert(self, timestamp, kind, notes):
         records = self.load()
-        record = dict(zip(self.columns, record))
+        record = dict(kind=kind, timestamp=timestamp, notes=notes)
         records.insert(0, record)
         self.save(records)
 
     def table(self):
-        table = Table(show_header=True, header_style="bold magenta")
-        for col in COLUMNS:
-            table.add_column(col, style="dim")
-        records = self.load()
-        for rec in records:
-            table.add_row(*rec.values())
-        return table
+        data = pd.read_csv(self.filename)
+        return data
 
     def first_row(self):
-        return self.load(nlines=1)
+        data = pd.read_csv(self.filename)
+        return data.head(1).to_dict('records')
 
     def import_from(self, source_filename):
-        source_manager = FileManager(source_filename)
-        source_records = source_manager.load()
-        target_records = self.load()
-        target_records = source_records + target_records
-        self.save(target_records)
+        source_data = pd.read_csv(source_filename)
+        target_data = pd.read_csv(self.filename)
+        data = pd.concat([source_data, target_data])
+        data.to_csv(self.filename, index=False)
 
 
 @app.command()
 def check(notes: str = "", filename: str = FILE_NAME):
     file_manager = FileManager(filename)
-    TYPE = COLUMNS[0]
-    last_type = file_manager.first_row()[0][TYPE]
+    last_kind = file_manager.first_row()[0][COLUMNS[KIND]]
     # build record
     timestamp = datetime.now().isoformat()
-    type_ = 'out' if last_type == 'in' else 'in'
+    kind = 'out' if last_kind == 'in' else 'in'
     # insert record
-    file_manager.insert(type_, timestamp, notes)
-    console.print(f"Check {type_} at {timestamp}", style="green")
+    file_manager.insert(kind=kind, timestamp=timestamp, notes=notes)
+    console.print(f"Check {kind} at {timestamp}", style="green")
 
 
 @app.command()
@@ -141,11 +126,11 @@ def summary(filename: str = FILE_NAME):
     last_out_time = None
 
     # Check if the first record is 'in' and add a current 'out' record
-    if records and records[0]['type'] == 'in':
+    if records and records[0]['kind'] == 'in':
         records.insert(
             0,
             {
-                'type': 'out',
+                'kind': 'out',
                 'timestamp': datetime.now().isoformat(),
             },
         )
@@ -155,13 +140,13 @@ def summary(filename: str = FILE_NAME):
         )
 
     for record in records:
-        type_ = record['type']
+        kind = record['kind']
         timestamp = datetime.fromisoformat(record['timestamp'])
         day = (
             timestamp.date().isoformat()
         )  # Extract just the day (in ISO format)
 
-        if type_ == 'in':
+        if kind == 'in':
             last_in_time = timestamp
         else:
             last_out_time = timestamp
