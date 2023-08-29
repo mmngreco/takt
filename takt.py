@@ -82,6 +82,7 @@ class FileManager:
         data = pd.read_csv(self.filename, nrows=nrows)
         # clean trailing spaces
         data = strip_values(data)[self.columns]
+        data.fillna('', inplace=True)
         return data
 
     def load(self, nrows=None):
@@ -96,10 +97,6 @@ class FileManager:
         records = self.load()
         records.insert(0, kwargs)
         self.save(records)
-
-    def table(self):
-        data = pd.read_csv(self.filename)
-        return data
 
     def first(self):
         data = self.read(nrows=1)
@@ -133,7 +130,12 @@ def check(notes: str = "", filename: str = FILE_NAME):
 @app.command()
 def display(filename: str = FILE_NAME):
     file_manager = FileManager(filename)
-    table = file_manager.table()
+    data = file_manager.read()
+    table = Table(show_header=True, header_style="bold magenta")
+    for column in data.columns:
+        table.add_column(column, style="dim")
+    for row in data.to_dict('records'):
+        table.add_row(*row.values())
     console.print(table)
 
 
