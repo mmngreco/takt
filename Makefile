@@ -26,7 +26,9 @@ info: ## Print the current version
 	@echo v: $(v)
 
 tag: ## Create a new git tag with the specified version and update pyproject.toml
-	git tag -a $(v) -m "version $(v)"
-	$(MAKE) update_version
+	@git tag -a $(v) -m "version $(v)"
+	@$(MAKE) update_version
+	@git add pyproject.toml
+	git commit -m "Bump version to $(v)"
 
 .PHONY: update_version build install dev publish info help
