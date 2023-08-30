@@ -190,8 +190,8 @@ def summary(filename: str = FILE_NAME):
     table.add_column("Hours", style="dim")
 
     for day, hours in summary_dict.items():
-        h = int(hours)
-        m = int((hours - h) * 60)
+        h = str(int(hours)).zfill(2)
+        m = str(int((hours - int(hours)) * 60)).zfill(2)
         table.add_row(day, f"{h}:{m}")
 
     console.print(table)
