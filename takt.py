@@ -39,7 +39,6 @@ import os
 import subprocess
 from collections import defaultdict
 from datetime import datetime
-from datetime import date
 
 import pandas as pd
 import typer
@@ -62,38 +61,49 @@ COLUMNS = [
 ]
 
 
-def calculate_hours(records: list[dict], by_week: bool = False) -> dict[str, float]:
-    summary_dict = defaultdict(float)
-    last_in_time = None
-    last_out_time = None
+class Aggregator:
+    def __init__(self, records: list[dict]):
+        self.records = records
 
-    for record in records:
-        kind = record[KIND]
-        timestamp = record[TIMESTAMP]
-        week = record.get('week', None)
-        year = record.get('year', None)
+    def calculate(self, period: str | None = None) -> dict[str, float]:
+        summary_dict = defaultdict(float)
+        last_in_time = None
+        last_out_time = None
 
-        group_by = f"{year}-W{week}" if by_week else timestamp.date().isoformat()
+        for record in self.records:
+            kind = record[KIND]
+            timestamp = record[TIMESTAMP]
+            week = timestamp.strftime('%U')
+            year = timestamp.year
+            month = timestamp.month
 
-        if kind == 'in':
-            last_in_time = timestamp
-        else:
-            last_out_time = timestamp
+            if period == 'wtd':
+                group_by = f"{year}-W{week}"
+            elif period == 'ytd':
+                group_by = f"{year}"
+            elif period == 'mtd':
+                group_by = f"{year}-M{month}"
+            else:
+                group_by = timestamp.date().isoformat()
 
-        if last_in_time and last_out_time:
-            time_diff = last_out_time - last_in_time
-            hours = time_diff.total_seconds() / 3600
-            summary_dict[group_by] += hours
-            last_in_time = None
-            last_out_time = None
+            if kind == 'in':
+                last_in_time = timestamp
+            else:
+                last_out_time = timestamp
 
-    return summary_dict
+            if last_in_time and last_out_time:
+                time_diff = last_out_time - last_in_time
+                hours = time_diff.total_seconds() / 3600
+                summary_dict[group_by] += hours
+                last_in_time = None
+                last_out_time = None
 
+        return summary_dict
 
 
 def display_summary_table(summary_dict: str | float):
     table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Day", style="dim")
+    table.add_column("Date", style="dim")
     table.add_column("Hours", style="dim")
 
     for day, hours in summary_dict.items():
@@ -129,7 +139,7 @@ class FileManager:
         data.timestamp = data.timestamp.astype("datetime64[ns]")
         return data
 
-    def load(self, nrows=None):
+    def load(self, nrows=None) -> dict[str, float]:
         data = self.read(nrows=nrows)
         return data.to_dict('records')
 
@@ -162,6 +172,9 @@ class FileManager:
 
 @app.command()
 def check(notes: str = "", filename: str = FILE_NAME):
+    """
+    Check in or out.
+    """
     file_manager = FileManager(filename)
     last_kind = file_manager.first()[KIND]
     # build record
@@ -180,6 +193,9 @@ def check(notes: str = "", filename: str = FILE_NAME):
 
 @app.command()
 def display(filename: str = FILE_NAME):
+    """
+    Show all records.
+    """
     file_manager = FileManager(filename)
     data = file_manager.read()
     table = Table(show_header=True, header_style="bold magenta")
@@ -228,26 +244,55 @@ def import_csv(source: str, target: str = FILE_NAME):
         console.print(
             f"Data imported form {source} to {target}.", style="green"
         )
-
     except Exception as e:
         console.print(f"Error: {e}", style="red")
 
 
 @app.command()
 def summary(filename: str = FILE_NAME):
+    """
+    Daily summary.
+    """
     file_manager = FileManager(filename)
     records = file_manager.load()
-    summary_dict = calculate_hours(records)
+    aggregator = Aggregator(records)
+    summary_dict = aggregator.calculate()
     display_summary_table(summary_dict)
 
 
 @app.command()
 def wtd(filename: str = FILE_NAME):
+    """
+    Week to date summary.
+    """
     file_manager = FileManager(filename)
-    today = date.today()
-    year, week, _ = today.isocalendar()
-    records = file_manager.records_of_week(year, week).to_dict('records')
-    summary_dict = calculate_hours(records, by_week=True)
+    records = file_manager.load()
+    aggregator = Aggregator(records)
+    summary_dict = aggregator.calculate('wtd')
+    display_summary_table(summary_dict)
+
+
+@app.command()
+def ytd(filename: str = FILE_NAME):
+    """
+    Year to date summary.
+    """
+    file_manager = FileManager(filename)
+    records = file_manager.load()
+    aggregator = Aggregator(records)
+    summary_dict = aggregator.calculate('ytd')
+    display_summary_table(summary_dict)
+
+
+@app.command()
+def mtd(filename: str = FILE_NAME):
+    """
+    Month to date summary.
+    """
+    file_manager = FileManager(filename)
+    records = file_manager.load()
+    aggregator = Aggregator(records)
+    summary_dict = aggregator.calculate('mtd')
     display_summary_table(summary_dict)
 
 
