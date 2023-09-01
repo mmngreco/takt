@@ -38,7 +38,8 @@ MIT License
 import os
 import subprocess
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import date
 
 import pandas as pd
 import typer
@@ -59,6 +60,48 @@ COLUMNS = [
     KIND,
     NOTES,
 ]
+
+
+def calculate_hours(records: list[dict], by_week: bool = False) -> dict[str, float]:
+    summary_dict = defaultdict(float)
+    last_in_time = None
+    last_out_time = None
+
+    for record in records:
+        kind = record[KIND]
+        timestamp = record[TIMESTAMP]
+        week = record.get('week', None)
+        year = record.get('year', None)
+
+        group_by = f"{year}-W{week}" if by_week else timestamp.date().isoformat()
+
+        if kind == 'in':
+            last_in_time = timestamp
+        else:
+            last_out_time = timestamp
+
+        if last_in_time and last_out_time:
+            time_diff = last_out_time - last_in_time
+            hours = time_diff.total_seconds() / 3600
+            summary_dict[group_by] += hours
+            last_in_time = None
+            last_out_time = None
+
+    return summary_dict
+
+
+
+def display_summary_table(summary_dict: str | float):
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Day", style="dim")
+    table.add_column("Hours", style="dim")
+
+    for day, hours in summary_dict.items():
+        h = str(int(hours)).zfill(2)
+        m = str(int((hours - int(hours)) * 60)).zfill(2)
+        table.add_row(day, f"{h}:{m}")
+
+    console.print(table)
 
 
 def strip_values(df: pd.DataFrame) -> pd.DataFrame:
@@ -83,6 +126,7 @@ class FileManager:
         # clean trailing spaces
         data = strip_values(data)[self.columns]
         data.fillna('', inplace=True)
+        data.timestamp = data.timestamp.astype("datetime64[ns]")
         return data
 
     def load(self, nrows=None):
@@ -107,6 +151,13 @@ class FileManager:
         target_data = pd.read_csv(self.filename)
         data = pd.concat([source_data, target_data])
         data.to_csv(self.filename, index=False)
+
+    def records_of_week(self, year, week):
+        df = self.read()
+        df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP])
+        df['week'] = df[TIMESTAMP].dt.strftime('%U')
+        df['year'] = df[TIMESTAMP].dt.year
+        return df[(df['week'] == str(week)) & (df['year'] == year)]
 
 
 @app.command()
@@ -136,64 +187,6 @@ def display(filename: str = FILE_NAME):
         table.add_column(column, style="dim")
     for row in data.to_dict('records'):
         table.add_row(*row.values())
-    console.print(table)
-
-
-@app.command()
-def summary(filename: str = FILE_NAME):
-    file_manager = FileManager(filename)
-    records = file_manager.load()
-
-    summary_dict = defaultdict(float)  # Dictionary to hold the summarized data
-
-    last_in_time = None
-    last_out_time = None
-
-    # Check if the first record is 'in' and add a current 'out' record
-    if records and records[0][KIND] == 'in':
-        records.insert(
-            0,
-            {
-                KIND: 'out',
-                TIMESTAMP: datetime.now().isoformat(),
-            },
-        )
-        console.print(
-            "Note: The last 'in' record was inferred using 'now' as 'out'.",
-            style="red",
-        )
-
-    for record in records:
-        kind = record[KIND]
-        timestamp = datetime.fromisoformat(record[TIMESTAMP])
-        day = (
-            timestamp.date().isoformat()
-        )  # Extract just the day (in ISO format)
-
-        if kind == 'in':
-            last_in_time = timestamp
-        else:
-            last_out_time = timestamp
-
-        if last_in_time and last_out_time:
-            # Calculate the time difference in hours
-            time_diff = last_out_time - last_in_time
-            hours = time_diff.total_seconds() / 3600
-
-            summary_dict[day] += hours
-            last_in_time = None
-            last_out_time = None
-
-    # Now let's display the summary using Rich's Table
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Day", style="dim")
-    table.add_column("Hours", style="dim")
-
-    for day, hours in summary_dict.items():
-        h = str(int(hours)).zfill(2)
-        m = str(int((hours - int(hours)) * 60)).zfill(2)
-        table.add_row(day, f"{h}:{m}")
-
     console.print(table)
 
 
@@ -238,6 +231,24 @@ def import_csv(source: str, target: str = FILE_NAME):
 
     except Exception as e:
         console.print(f"Error: {e}", style="red")
+
+
+@app.command()
+def summary(filename: str = FILE_NAME):
+    file_manager = FileManager(filename)
+    records = file_manager.load()
+    summary_dict = calculate_hours(records)
+    display_summary_table(summary_dict)
+
+
+@app.command()
+def wtd(filename: str = FILE_NAME):
+    file_manager = FileManager(filename)
+    today = date.today()
+    year, week, _ = today.isocalendar()
+    records = file_manager.records_of_week(year, week).to_dict('records')
+    summary_dict = calculate_hours(records, by_week=True)
+    display_summary_table(summary_dict)
 
 
 if __name__ == "__main__":
