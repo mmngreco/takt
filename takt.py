@@ -69,6 +69,14 @@ class Aggregator:
         summary_dict = defaultdict(float)
         last_in_time = None
         last_out_time = None
+        if self.records[0][KIND] == "in":
+            new_record = {
+                KIND: "out",
+                TIMESTAMP: pd.Timestamp.now(),
+            }
+            self.records.insert(0, new_record)
+            msg = "NOTE: Last out was inferred using `Timestamp.now()`."
+            console.print(msg)
 
         for record in self.records:
             kind = record[KIND]
@@ -136,7 +144,7 @@ class FileManager:
         # clean trailing spaces
         data = strip_values(data)[self.columns]
         data.fillna('', inplace=True)
-        data.timestamp = data.timestamp.astype("datetime64[ns]")
+        data.timestamp = data.timestamp.apply(pd.Timestamp).astype("datetime64[ns]")
         return data
 
     def load(self, nrows=None) -> dict[str, float]:
@@ -178,7 +186,7 @@ def check(notes: str = "", filename: str = FILE_NAME):
     file_manager = FileManager(filename)
     last_kind = file_manager.first()[KIND]
     # build record
-    timestamp = datetime.now().isoformat()
+    timestamp = pd.Timestamp.now()
     kind = 'out' if last_kind == 'in' else 'in'
     # insert record
     file_manager.insert(
