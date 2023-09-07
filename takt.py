@@ -133,18 +133,6 @@ def display_summary_table(summary_dict: dict[str, tuple[float, int]]):
 
     console.print(table)
 
-# def display_summary_table(summary_dict: str | float):
-#     table = Table(show_header=True, header_style="bold magenta")
-#     table.add_column("Date", style="dim")
-#     table.add_column("Hours", style="dim")
-#
-#     for day, hours in summary_dict.items():
-#         h = str(int(hours)).zfill(2)
-#         m = str(int((hours - int(hours)) * 60)).zfill(2)
-#         table.add_row(day, f"{h}:{m}")
-#
-#     console.print(table)
-#
 
 def strip_values(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.str.strip()
