@@ -61,12 +61,13 @@ COLUMNS = [
 ]
 
 
+
 class Aggregator:
     def __init__(self, records: list[dict]):
         self.records = records
 
     def calculate(self, period: str | None = None) -> dict[str, float]:
-        summary_dict = defaultdict(float)
+        summary_dict = defaultdict(lambda: [0.0, set()])
         last_in_time = None
         last_out_time = None
         if self.records[0][KIND] == "in":
@@ -102,25 +103,48 @@ class Aggregator:
             if last_in_time and last_out_time:
                 time_diff = last_out_time - last_in_time
                 hours = time_diff.total_seconds() / 3600
-                summary_dict[group_by] += hours
+                summary_dict[group_by][0] += hours
+                summary_dict[group_by][1].add(last_out_time.date())
                 last_in_time = None
                 last_out_time = None
 
         return summary_dict
 
 
-def display_summary_table(summary_dict: str | float):
+def format_time(hours: float) -> str:
+    h = str(int(hours)).zfill(2)
+    m = str(int((hours - int(hours)) * 60)).zfill(2)
+    return f"{h}:{m}"
+
+def display_summary_table(summary_dict: dict[str, tuple[float, int]]):
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Date", style="dim")
     table.add_column("Hours", style="dim")
+    table.add_column("Days", style="dim")  # Nueva columna
+    table.add_column("Avg Hours", style="dim")  # Nueva columna
 
-    for day, hours in summary_dict.items():
-        h = str(int(hours)).zfill(2)
-        m = str(int((hours - int(hours)) * 60)).zfill(2)
-        table.add_row(day, f"{h}:{m}")
+    for day, (total_hours, days) in summary_dict.items():
+        num_days = len(days)
+        total_hours_str = format_time(total_hours)
+        avg_hours = total_hours / num_days if num_days else 0  # Media de horas
+        avg_hours_str = format_time(avg_hours)
+
+        table.add_row(day, total_hours_str, str(num_days), avg_hours_str)
 
     console.print(table)
 
+# def display_summary_table(summary_dict: str | float):
+#     table = Table(show_header=True, header_style="bold magenta")
+#     table.add_column("Date", style="dim")
+#     table.add_column("Hours", style="dim")
+#
+#     for day, hours in summary_dict.items():
+#         h = str(int(hours)).zfill(2)
+#         m = str(int((hours - int(hours)) * 60)).zfill(2)
+#         table.add_row(day, f"{h}:{m}")
+#
+#     console.print(table)
+#
 
 def strip_values(df: pd.DataFrame) -> pd.DataFrame:
     df.columns = df.columns.str.strip()
