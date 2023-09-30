@@ -18,14 +18,6 @@ You can install `takt` using pip:
 pipx install takt
 ```
 
-Or directly from the repository:
-
-```bash
-git clone https://github.com/yourusername/takt.git
-cd takt
-pip install .
-```
-
 ## Usage
 
 ```bash
