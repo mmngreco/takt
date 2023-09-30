@@ -1,0 +1,9 @@
+# linting
+ruff
+black
+mypy
+pytest
+# interactive
+pdbpp
+ipython
+# vim: tw=0 ft=sh
