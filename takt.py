@@ -116,20 +116,23 @@ def format_time(hours: float) -> str:
     m = str(int((hours - int(hours)) * 60)).zfill(2)
     return f"{h}:{m}"
 
-def display_summary_table(summary_dict: dict[str, tuple[float, int]]):
+
+def display_summary_table(summary_dict: dict[str, tuple[float, int]], limit=10):
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Date", style="dim")
     table.add_column("Hours", style="dim")
     table.add_column("Days", style="dim")  # Nueva columna
     table.add_column("Avg Hours", style="dim")  # Nueva columna
 
-    for day, (total_hours, days) in summary_dict.items():
+    for i, (day, (total_hours, days)) in enumerate(summary_dict.items()):
         num_days = len(days)
         total_hours_str = format_time(total_hours)
         avg_hours = total_hours / num_days if num_days else 0  # Media de horas
         avg_hours_str = format_time(avg_hours)
 
         table.add_row(day, total_hours_str, str(num_days), avg_hours_str)
+        if i >= limit:
+            break
 
     console.print(table)
 
@@ -314,6 +317,10 @@ def mtd(filename: str = FILE_NAME):
     aggregator = Aggregator(records)
     summary_dict = aggregator.calculate('mtd')
     display_summary_table(summary_dict)
+
+# TODO: Add a command to create a gantt chart using mermaid
+# TODO: Add a command to commit changes to git
+# TODO: Implement multiple files (projects)
 
 
 if __name__ == "__main__":
