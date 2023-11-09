@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "takt"
-version = "2023.11.01"
+version = "2023.11.02"
 authors = [{name="Max Greco", email="mmngreco@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.6"
