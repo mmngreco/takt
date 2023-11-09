@@ -42,6 +42,7 @@ from datetime import datetime
 
 import pandas as pd
 import typer
+from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
@@ -155,12 +156,26 @@ class FileManager:
         self.filename = filename
 
     def read(self, nrows=None):
+        if not self.exists():
+            raise ValueError(f"File {self.filename} does not exist.")
         data = pd.read_csv(self.filename, nrows=nrows)
+        if data.empty:
+            return data
         # clean trailing spaces
         data = strip_values(data)[self.columns]
         data.fillna('', inplace=True)
         data.timestamp = data.timestamp.apply(pd.Timestamp).astype("datetime64[ns]")
         return data
+
+
+    def exists(self, create=True):
+        if Path(self.filename).exists():
+            return True
+        if create:
+            pd.DataFrame(columns=self.columns).to_csv(self.filename, index=False)
+            return True
+        return False
+
 
     def load(self, nrows=None) -> dict[str, float]:
         data = self.read(nrows=nrows)
@@ -177,6 +192,8 @@ class FileManager:
 
     def first(self):
         data = self.read(nrows=1)
+        if data.empty:
+            return None
         return data.to_dict('records')[0]
 
     def import_from(self, source_filename):
@@ -199,10 +216,14 @@ def check(notes: str = "", filename: str = FILE_NAME):
     Check in or out.
     """
     file_manager = FileManager(filename)
-    last_kind = file_manager.first()[KIND]
+    # NOTE: sorted by timestamp in descending order (most recent first)
+    last_kind = file_manager.first()
+    if last_kind is None or last_kind[KIND] == 'out':
+        kind = 'in'
+    else:
+        kind = 'out'
     # build record
     timestamp = pd.Timestamp.now()
-    kind = 'out' if last_kind == 'in' else 'in'
     # insert record
     file_manager.insert(
         **{
@@ -225,7 +246,9 @@ def display(filename: str = FILE_NAME):
     for column in data.columns:
         table.add_column(column, style="dim")
     for row in data.to_dict('records'):
-        table.add_row(*row.values())
+        timestamp, kind, notes = row.values()
+        timestamp = str(timestamp)
+        table.add_row(timestamp, kind, notes)
     console.print(table)
 
 
