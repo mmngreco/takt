@@ -1,5 +1,3 @@
-VERSION := $(shell git describe --tags)
-
 help: ## print help
 	@echo "Makefile help"
 	@echo "Usage: make [target]"
