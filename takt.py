@@ -34,16 +34,7 @@ License
 -------
 MIT License
 
-TODO
-----
-- [x] Add plug-in system
-- [ ] Add a command to create a gantt chart using mermaid
-- [ ] Add a command to commit changes to git
-- [ ] Implement multiple files (projects)
-- [ ] Create data Structure for rows and aggregations
-
 """
-from datetime import date
 import os
 import subprocess
 
@@ -70,7 +61,7 @@ COLUMNS = [
 SECONDS_TO_HOURS = 1 / 3600
 
 
-def get_plugins(prefix):
+def load_plugins(prefix):
     import importlib
     import pkgutil
 
@@ -86,6 +77,8 @@ def get_plugins(prefix):
                 )
                 module = None
             out[name] = module
+    # modules_list = list(pkgutil.iter_modules())
+    # breakpoint()
     return out
 
 
@@ -143,12 +136,6 @@ class FileManager:
             return None
         return data.to_dict('records')[0]
 
-    def import_from(self, source_filename):
-        source_data = pd.read_csv(source_filename)
-        target_data = pd.read_csv(self.filename)
-        data = pd.concat([source_data, target_data])
-        data.to_csv(self.filename, index=False)
-
     def records_of_week(self, year, week):
         df = self.read()
         df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP])
@@ -168,8 +155,8 @@ class WeekRef:
     @staticmethod
     def group(timestamp):
         year = timestamp.year
-        week = timestamp.strftime('%U')
-        group_by = f"{year}-W{week}"
+        week = int(timestamp.strftime("%U"))
+        group_by = f"{year}-W{week:02d}"
         return group_by
 
 
@@ -186,22 +173,8 @@ class MonthRef:
     def group(timestamp):
         year = timestamp.year
         month = timestamp.month
-        group_by = f"{year}-M{month}"
+        group_by = f"{year}-M{month:02d}"
         return group_by
-
-
-class AggRow:
-    def __init__(self, group: str, total: float | int, collection: set[date]):
-        self.group = group
-        self.total = total
-        self.collection = collection
-
-    def to_dict(self) -> dict[str, str | float | set[date]]:
-        return {
-            'time_ref': self.group,
-            'total': self.total,
-            'days': self.collection,
-        }
 
 
 class Aggregator:
@@ -224,6 +197,7 @@ class Aggregator:
             new_record = {
                 KIND: "out",
                 TIMESTAMP: pd.Timestamp.now(),
+                NOTES: "Inferred by takt.",
             }
             records.insert(0, new_record)
             msg = "NOTE: Last out was inferred using `Timestamp.now()`."
@@ -231,58 +205,79 @@ class Aggregator:
         return records
 
     def calculate(self, records: list[dict]) -> list[dict]:
+        records = self.infer_last_out(records)
+        row_collection = []
         last_in_time = None
         last_out_time = None
 
-        records = self.infer_last_out(records)
-        row_collection = []
-
-        # loop over records
         for record in records:
             # get variables
-            kind = record[KIND]
             timestamp = record[TIMESTAMP]
-            note = record[NOTES]
 
             # update variables
-            if kind == 'in':
+            if record[KIND] == 'in':
                 last_in_time = timestamp
             else:
                 last_out_time = timestamp
 
-            # only consider pairs of in/out
             if last_in_time and last_out_time:
-                # calculate hours
-                time_diff = last_out_time - last_in_time
-                total_seconds = time_diff.total_seconds()
-                total_hours = total_seconds * SECONDS_TO_HOURS
                 group_by = self.time_agg(timestamp)
+                total_hours = (last_out_time - last_in_time).total_seconds() * SECONDS_TO_HOURS
                 date = timestamp.date()
-                # save data
-                new_row = dict(
-                    group=group_by, hours=total_hours, dates=set([date])
-                )
-                if not row_collection:
-                    row_collection.append(new_row)
-                else:
-                    pre_row = row_collection[-1]
-                    if new_row["group"] == pre_row["group"]:
-                        pre_row["hours"] += new_row["hours"]
-                        pre_row["dates"].update(new_row["dates"])
-                    else:
-                        row_collection.append(new_row)
+                note = record[NOTES]
+
+                row = [group_by, total_hours, [date], [note]]
+                row_collection.append(row)
 
                 # reset variables
                 last_in_time = None
                 last_out_time = None
 
+        # aggregate to pandas
+        table = pd.DataFrame(row_collection, columns=['group', 'hours', 'dates', 'notes'])
+        summ = table.groupby('group').sum()
+        summ.sort_index(inplace=True, ascending=False)
+        summ.loc[:, "dates"] = summ.dates.apply(set)
+        summ.loc[:, "notes"] = summ.notes.apply(set)
+        summ.loc[:, "avg.hours"] = summ.hours / summ.dates.apply(len)
+        summ = summ.reset_index()
+        row_collection = summ.to_dict(orient='records')
         return row_collection
+
+
+def format_time_explicit(hours: float, hours_by_day=7.5) -> str:
+    d = int(hours / hours_by_day)
+    h = int((hours % hours_by_day) // 1)
+    m = int((hours % hours_by_day % 1) * 60)
+    if d > 0:
+        return f"{d:>02.0f} days{h:> 2.0f}H {m:> 3.0f} m"
+    return f"{h:> 10.0f} H{m:> 3.0f} m"
 
 
 def format_time(hours: float) -> str:
     h = str(int(hours)).zfill(2)
     m = str(int((hours - int(hours)) * 60)).zfill(2)
     return f"{h}:{m}"
+
+
+class TableSummary:
+    # WIP
+    def __init__(self):
+        self.table = None
+
+    def build_table(self, records):
+        table = Table(show_header=True, header_style="bold magenta")
+        columns = [c for c in records[0].keys()]
+        for column in columns:
+            table.add_column(column, style="dim")
+
+        for row in records:
+            table.add_row(*row.values())
+        self.table = table
+        return table
+
+    def show(self):
+        console.print(self.table)
 
 
 def display_summary_table(summary_dict: list[dict], limit=10):
@@ -320,11 +315,55 @@ def strip_values(df: pd.DataFrame) -> pd.DataFrame:
 
 
 class Takt:
-    """Interface for takt.
-
-    This class provides an interface for takt common operations.
-
     """
+    Interface for managing and processing data records, primarily focused on
+    file system interactions and data aggregation.
+
+    This class encapsulates functionalities for file management, data
+    retrieval, insertion, and aggregation. It is designed to provide a
+    structured and extendable approach to handling file-based data records.
+
+    Attributes
+    ----------
+    row : FileRow
+        Class representing a row in the data file.
+    filename : str
+        Name of the file to manage.
+    _file_manager : FileManager, optional
+        Internal manager for file operations.
+    _aggregator : Aggregator, optional
+        Internal tool for data aggregation.
+
+    Methods
+    -------
+    file_manager()
+        Accessor for the FileManager instance, lazily initialized.
+    all_rows(nrows=None)
+        Retrieves a list of data records from the file, optionally limited to `nrows`.
+    insert_row(timestamp, kind, notes)
+        Inserts a new row into the file with the given data.
+    first_row()
+        Returns the first data record from the file.
+    aggregate(period="daily")
+        Aggregates data records based on the specified period.
+    register(*args, plugin_name=None, **kwargs)
+        Static method. Registers a new command with an optional plugin name.
+    print_console(msg, style=None)
+        Static method. Prints a message to the console with optional styling.
+
+    Examples
+    --------
+    >>> takt = Takt()
+    >>> takt.insert_row("2023-01-01", "example", "This is a note.")
+    >>> takt.print_console(takt_instance.first_row())
+
+    Notes
+    -----
+    The class is intended to be used in environments where structured
+    file-based data management is required. It is particularly useful for
+    scenarios involving data aggregation and processing.
+    """
+
 
     def __init__(self):
         self.row = FileRow
@@ -341,7 +380,7 @@ class Takt:
             self._file_manager = file_manager
         return file_manager
 
-    def all_rows(self, nrows=None):
+    def all_rows(self, nrows=None) -> list[dict[str, float | str]]:
         """Return records from file."""
         file_manager = self.file_manager
         return file_manager.load(nrows=nrows)
@@ -363,22 +402,26 @@ class Takt:
         return aggregator.calculate(records)
 
     @staticmethod
-    def register(*args, **kwargs):
+    def register(*args, plugin_name=None, **kwargs):
         """Decorator to register a new Takt command.
 
         It uses the typer command decorator. So use the same signature. This
         means that you can use this decorator to register a new command in
         typer as well.
         """
+        if plugin_name is None:
+            raise ValueError("plugin_name must be provided.")
+        # ensure rich help panel is not duplicated
+        kwargs = {**kwargs, "rich_help_panel": plugin_name}
         return app.command(*args, **kwargs)
 
     @staticmethod
     def print_console(msg, style=None):
-        """ """
+        """Print message to console."""
         console.print(msg, style=style)
 
 
-@Takt.register()
+@app.command()
 def check(notes: str = ""):
     """
     Check in or out.
@@ -397,7 +440,7 @@ def check(notes: str = ""):
     )
 
 
-@Takt.register()
+@app.command()
 def display():
     """
     Show all records.
@@ -416,7 +459,7 @@ def display():
     t.print_console(table)
 
 
-@Takt.register()
+@app.command()
 def edit():
     """
     Edit the records file.
@@ -433,7 +476,7 @@ def edit():
         )
 
 
-@Takt.register()
+@app.command()
 def summary():
     """
     Daily summary.
@@ -443,7 +486,7 @@ def summary():
     display_summary_table(summary_dict)
 
 
-@Takt.register()
+@app.command()
 def wtd():
     """
     Week to date summary.
@@ -453,7 +496,7 @@ def wtd():
     display_summary_table(list_dict)
 
 
-@Takt.register()
+@app.command()
 def ytd():
     """
     Year to date summary.
@@ -463,7 +506,7 @@ def ytd():
     display_summary_table(list_dict)
 
 
-@Takt.register()
+@app.command()
 def mtd():
     """
     Month to date summary.
@@ -473,7 +516,7 @@ def mtd():
     display_summary_table(summary_dict)
 
 
-plugins = get_plugins("takt_")
+plugins = load_plugins("takt_")
 
 if __name__ == "__main__":
     app()
