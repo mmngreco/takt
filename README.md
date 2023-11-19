@@ -1,6 +1,8 @@
 # Takt
 
-A command-line tool for tracking time, built with Rich and Typer.
+A command-line tool for tracking time, built with Rich and Typer. Takt is
+extensible with plugins, you can create you own pluging to make takt even
+better check out the [Plugins](#plugins) section.
 
 ## About the name
 
@@ -29,15 +31,14 @@ pip install .
 ## Usage
 
 ```bash
-takt [options]
+takt --help
 ```
 
 ### Commands
 
+- `help`: Displays help message.
 - `check`: Logs the check-in or check-out time.
-- `export`: Exports the logs to a CSV file.
-- `import`: Imports logs from a CSV file.
-- `summary`: Displays a summary of the tracked time.
+- `summary`: Exports the logs to a CSV file.
 
 ## Examples
 
@@ -47,11 +48,6 @@ takt [options]
 takt check
 ```
 
-### Importing logs from a CSV file
-
-```bash
-takt import --file=file.csv
-```
 
 ### Displaying a summary of the tracked time
 
@@ -59,7 +55,22 @@ takt import --file=file.csv
 takt summary
 ```
 
+
+## Plugins
+
+You can create your own plugins to extend takt as you want. Check how to do it
+[here](https://github.com/mmngreco/takt_plugin).
+
+> [!NOTE]
+>
+> Don't forget to share your plugin with me. I would be glad to see how you use
+> `takt`.
+
+
+
+<!--
 ## Contribution
 
 Any kind of contribution is welcome. Please refer to the
 [Contribution Guidelines](CONTRIBUTING.md) for more details.
+-->
