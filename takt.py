@@ -36,16 +36,16 @@ MIT License
 
 TODO
 ----
-- [o] Add plug-in system
+- [x] Add plug-in system
 - [ ] Add a command to create a gantt chart using mermaid
 - [ ] Add a command to commit changes to git
 - [ ] Implement multiple files (projects)
+- [ ] Create data Structure for rows and aggregations
 
 """
 from datetime import date
 import os
 import subprocess
-from collections import defaultdict
 
 import pandas as pd
 import typer
@@ -70,6 +70,25 @@ COLUMNS = [
 SECONDS_TO_HOURS = 1 / 3600
 
 
+def get_plugins(prefix):
+    import importlib
+    import pkgutil
+
+    out = {}
+    modules = pkgutil.iter_modules()
+    for _, name, _ in modules:
+        if name.startswith(prefix):
+            try:
+                module = importlib.import_module(name)
+            except Exception as e:
+                console.print(
+                    f"\n[red]WARNING:[/] Plugin '{name}' not imported: {e}"
+                )
+                module = None
+            out[name] = module
+    return out
+
+
 class FileRow(dict):
     def __init__(self, timestamp, kind, notes):
         super().__init__(timestamp=timestamp, kind=kind, notes=notes)
@@ -90,20 +109,22 @@ class FileManager:
         # clean trailing spaces
         data = strip_values(data)[self.columns]
         data.fillna('', inplace=True)
-        data.timestamp = data.timestamp.apply(pd.Timestamp).astype("datetime64[ns]")
+        data.timestamp = data.timestamp.apply(pd.Timestamp).astype(
+            "datetime64[ns]"
+        )
         return data
-
 
     def exists(self, create=True):
         if Path(self.filename).exists():
             return True
         if create:
-            pd.DataFrame(columns=self.columns).to_csv(self.filename, index=False)
+            pd.DataFrame(columns=self.columns).to_csv(
+                self.filename, index=False
+            )
             return True
         return False
 
-
-    def load(self, nrows=None) -> list[dict[str, float]]:
+    def load(self, nrows=None) -> list[dict[str, float | str]]:
         data = self.read(nrows=nrows)
         return data.to_dict('records')
 
@@ -136,12 +157,12 @@ class FileManager:
         return df[(df['week'] == str(week)) & (df['year'] == year)]
 
 
-
 class DailyRef:
     @staticmethod
     def group(timestamp):
         group_by = timestamp.date().isoformat()
         return group_by
+
 
 class WeekRef:
     @staticmethod
@@ -170,7 +191,6 @@ class MonthRef:
 
 
 class AggRow:
-
     def __init__(self, group: str, total: float | int, collection: set[date]):
         self.group = group
         self.total = total
@@ -182,6 +202,7 @@ class AggRow:
             'total': self.total,
             'days': self.collection,
         }
+
 
 class Aggregator:
     def __init__(self, period: str = 'daily'):
@@ -209,7 +230,7 @@ class Aggregator:
             console.print(msg)
         return records
 
-    def calculate(self, records: list[FileRow]) -> list[AggRow]:
+    def calculate(self, records: list[dict]) -> list[dict]:
         last_in_time = None
         last_out_time = None
 
@@ -231,7 +252,6 @@ class Aggregator:
 
             # only consider pairs of in/out
             if last_in_time and last_out_time:
-
                 # calculate hours
                 time_diff = last_out_time - last_in_time
                 total_seconds = time_diff.total_seconds()
@@ -239,8 +259,9 @@ class Aggregator:
                 group_by = self.time_agg(timestamp)
                 date = timestamp.date()
                 # save data
-                new_row = dict(group=group_by, hours=total_hours, dates=set([date]))
-                # breakpoint()
+                new_row = dict(
+                    group=group_by, hours=total_hours, dates=set([date])
+                )
                 if not row_collection:
                     row_collection.append(new_row)
                 else:
@@ -258,18 +279,17 @@ class Aggregator:
         return row_collection
 
 
-
 def format_time(hours: float) -> str:
     h = str(int(hours)).zfill(2)
     m = str(int((hours - int(hours)) * 60)).zfill(2)
     return f"{h}:{m}"
 
 
-def display_summary_table(summary_dict: list[dict[str, str | float | int]], limit=10):
+def display_summary_table(summary_dict: list[dict], limit=10):
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Date", style="dim")
     table.add_column("Hours", style="dim")
-    table.add_column("N.Days", style="dim")       # Nueva columna
+    table.add_column("N.Days", style="dim")  # Nueva columna
     table.add_column("Avg Hours", style="dim")  # Nueva columna
 
     for i, row in enumerate(summary_dict):
@@ -300,6 +320,12 @@ def strip_values(df: pd.DataFrame) -> pd.DataFrame:
 
 
 class Takt:
+    """Interface for takt.
+
+    This class provides an interface for takt common operations.
+
+    """
+
     def __init__(self):
         self.row = FileRow
         self.filename = FILE_NAME
@@ -308,62 +334,76 @@ class Takt:
 
     @property
     def file_manager(self):
+        """Get File manager."""
         file_manager = self._file_manager
         if file_manager is None:
             file_manager = FileManager(self.filename)
             self._file_manager = file_manager
         return file_manager
 
-    def records(self, nrows=None):
+    def all_rows(self, nrows=None):
+        """Return records from file."""
         file_manager = self.file_manager
         return file_manager.load(nrows=nrows)
 
-    def insert(self, timestamp, kind, notes):
+    def insert_row(self, timestamp, kind, notes):
+        """Inser row in file."""
         file_manager = self.file_manager
         file_manager.insert(**self.row(timestamp, kind, notes))
 
-    def first(self):
+    def first_row(self):
+        """Return first row from file."""
         file_manager = self.file_manager
         return file_manager.first()
 
-    def aggregate(self, period=None):
+    def aggregate(self, period: str = "daily") -> list[dict]:
+        """Aggregate records."""
         aggregator = Aggregator(period)
-        records = self.records()
+        records = self.all_rows()
         return aggregator.calculate(records)
 
     @staticmethod
-    def command(*args, **kwargs):
+    def register(*args, **kwargs):
+        """Decorator to register a new Takt command.
+
+        It uses the typer command decorator. So use the same signature. This
+        means that you can use this decorator to register a new command in
+        typer as well.
+        """
         return app.command(*args, **kwargs)
 
     @staticmethod
-    def print(msg, style=None):
+    def print_console(msg, style=None):
+        """ """
         console.print(msg, style=style)
 
 
-@Takt.command()
+@Takt.register()
 def check(notes: str = ""):
     """
     Check in or out.
     """
-    t  = Takt()
+    t = Takt()
     timestamp = pd.Timestamp.now()
-    last_kind = t.first()
+    last_kind = t.first_row()
     # infer kind
     if last_kind is None or last_kind[KIND] == 'out':
         kind = 'in'
     else:
         kind = 'out'
-    t.insert(timestamp, kind, notes)
-    t.print(f"Check {kind} at {timestamp}", style="green")
+    t.insert_row(timestamp, kind, notes)
+    t.print_console(
+        f"Check [bold magenta]{kind.upper()}[/] at {timestamp}", style="green"
+    )
 
 
-@app.command()
+@Takt.register()
 def display():
     """
     Show all records.
     """
     t = Takt()
-    data = t.records()
+    data = t.all_rows()
 
     table = Table(show_header=True, header_style="bold magenta")
     for column in data[0].keys():
@@ -373,11 +413,11 @@ def display():
         timestamp = str(timestamp)
         table.add_row(timestamp, kind, notes)
 
-    t.print(table)
+    t.print_console(table)
 
 
-@app.command()
-def edit(filename: str = FILE_NAME):
+@Takt.register()
+def edit():
     """
     Edit the records file.
     """
@@ -386,14 +426,14 @@ def edit(filename: str = FILE_NAME):
         'vim',  # Vim by default
     )
     try:
-        subprocess.run([editor, filename])
+        subprocess.run([editor, FILE_NAME])
     except FileNotFoundError:
         typer.echo(
             f"`{editor}` not found, check if it is installed and accessible."
         )
 
 
-@app.command()
+@Takt.register()
 def summary():
     """
     Daily summary.
@@ -403,8 +443,8 @@ def summary():
     display_summary_table(summary_dict)
 
 
-@app.command()
-def wtd(filename: str = FILE_NAME):
+@Takt.register()
+def wtd():
     """
     Week to date summary.
     """
@@ -413,7 +453,7 @@ def wtd(filename: str = FILE_NAME):
     display_summary_table(list_dict)
 
 
-@app.command()
+@Takt.register()
 def ytd():
     """
     Year to date summary.
@@ -423,7 +463,7 @@ def ytd():
     display_summary_table(list_dict)
 
 
-@app.command()
+@Takt.register()
 def mtd():
     """
     Month to date summary.
@@ -433,18 +473,7 @@ def mtd():
     display_summary_table(summary_dict)
 
 
+plugins = get_plugins("takt_")
+
 if __name__ == "__main__":
-    import importlib
-    import pkgutil
-
-    discovered_plugins = {
-        name: importlib.import_module(name)
-        for _, name, _
-        in pkgutil.iter_modules()
-        if name.startswith('takt_')
-    }
-
-    for name, plugin in discovered_plugins.items():
-        app.add_typer(plugin.app)
-
     app()
