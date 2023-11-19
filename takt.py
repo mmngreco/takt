@@ -33,7 +33,6 @@ Authors
 License
 -------
 MIT License
-
 """
 import os
 import subprocess
