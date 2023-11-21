@@ -1,16 +1,15 @@
 [build-system]
-requires = ["flit_core >=2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "takt"
-version = "2023.11.02"
+version = "2023.11.02dev1"
 authors = [{name="Max Greco", email="mmngreco@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.6"
 dependencies = ["rich", "typer", "pandas"]
 license = {file = "LICENSE"}
-homepage = "https://github.com/mmngreco/takt"
 description = "Takt is a CLI tool for tracking time."
 
 
