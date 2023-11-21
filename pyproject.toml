@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.6"
 dependencies = ["rich", "typer", "pandas"]
 license = {file = "LICENSE"}
-homepage = "https://github.com/mmngreco/takt"
 description = "Takt is a CLI tool for tracking time."
 
 
