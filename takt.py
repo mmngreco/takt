@@ -95,15 +95,25 @@ class FileManager:
     def read(self, nrows=None):
         if not self.exists():
             raise ValueError(f"File {self.filename} does not exist.")
-        data = pd.read_csv(self.filename, nrows=nrows)
+        data = pd.read_csv(
+            self.filename,
+            nrows=nrows,
+            dtype=str,
+            na_filter=False,
+        )
         if data.empty:
             return data
-        # clean trailing spaces
-        data = strip_values(data)[self.columns]
-        data.fillna('', inplace=True)
+
+        # convert to proper types
+        data.kind = data.kind.astype(str)
+        data.notes = data.notes.astype(str)
         data.timestamp = data.timestamp.apply(pd.Timestamp).astype(
             "datetime64[ns]"
         )
+
+        # clean trailing spaces
+        data = strip_values(data)[self.columns]
+        data = data.fillna("")
         return data
 
     def exists(self, create=True):
