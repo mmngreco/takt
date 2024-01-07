@@ -46,8 +46,8 @@ from rich.table import Table
 app = typer.Typer()
 console = Console()
 
-DEFAULT_FILE = '~/.takt_file.csv'
-FILE_NAME = os.path.expanduser(os.getenv('TAKT_FILE', DEFAULT_FILE))
+DEFAULT_FILE = "~/.takt_file.csv"
+FILE_NAME = os.path.expanduser(os.getenv("TAKT_FILE", DEFAULT_FILE))
 
 TIMESTAMP = "timestamp"
 KIND = "kind"
@@ -95,15 +95,25 @@ class FileManager:
     def read(self, nrows=None):
         if not self.exists():
             raise ValueError(f"File {self.filename} does not exist.")
-        data = pd.read_csv(self.filename, nrows=nrows)
+        data = pd.read_csv(
+            self.filename,
+            nrows=nrows,
+            dtype=str,
+            na_filter=False,
+        )
         if data.empty:
             return data
-        # clean trailing spaces
-        data = strip_values(data)[self.columns]
-        data.fillna('', inplace=True)
+
+        # convert to proper types
+        data.kind = data.kind.astype(str)
+        data.notes = data.notes.astype(str)
         data.timestamp = data.timestamp.apply(pd.Timestamp).astype(
             "datetime64[ns]"
         )
+
+        # clean trailing spaces
+        data = strip_values(data)[self.columns]
+        data = data.fillna("")
         return data
 
     def exists(self, create=True):
@@ -118,7 +128,7 @@ class FileManager:
 
     def load(self, nrows=None) -> list[dict[str, float | str]]:
         data = self.read(nrows=nrows)
-        return data.to_dict('records')
+        return data.to_dict("records")
 
     def save(self, records):
         data = pd.DataFrame(records)[self.columns]
@@ -133,14 +143,14 @@ class FileManager:
         data = self.read(nrows=1)
         if data.empty:
             return None
-        return data.to_dict('records')[0]
+        return data.to_dict("records")[0]
 
     def records_of_week(self, year, week):
         df = self.read()
         df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP])
-        df['week'] = df[TIMESTAMP].dt.strftime('%U')
-        df['year'] = df[TIMESTAMP].dt.year
-        return df[(df['week'] == str(week)) & (df['year'] == year)]
+        df["week"] = df[TIMESTAMP].dt.strftime("%U")
+        df["year"] = df[TIMESTAMP].dt.year
+        return df[(df["week"] == str(week)) & (df["year"] == year)]
 
 
 class DailyRef:
@@ -177,15 +187,15 @@ class MonthRef:
 
 
 class Aggregator:
-    def __init__(self, period: str = 'daily'):
+    def __init__(self, period: str = "daily"):
         self.period = period
-        if period == 'wtd':
+        if period == "wtd":
             self.time_agg = WeekRef.group
-        elif period == 'ytd':
+        elif period == "ytd":
             self.time_agg = YearRef.group
-        elif period == 'mtd':
+        elif period == "mtd":
             self.time_agg = MonthRef.group
-        elif period == 'daily':
+        elif period == "daily":
             self.time_agg = DailyRef.group
         else:
             raise ValueError(f"Period {period} not supported.")
@@ -214,14 +224,16 @@ class Aggregator:
             timestamp = record[TIMESTAMP]
 
             # update variables
-            if record[KIND] == 'in':
+            if record[KIND] == "in":
                 last_in_time = timestamp
             else:
                 last_out_time = timestamp
 
             if last_in_time and last_out_time:
                 group_by = self.time_agg(timestamp)
-                total_hours = (last_out_time - last_in_time).total_seconds() * SECONDS_TO_HOURS
+                total_hours = (
+                    last_out_time - last_in_time
+                ).total_seconds() * SECONDS_TO_HOURS
                 date = timestamp.date()
                 note = record[NOTES]
 
@@ -233,14 +245,16 @@ class Aggregator:
                 last_out_time = None
 
         # aggregate to pandas
-        table = pd.DataFrame(row_collection, columns=['group', 'hours', 'dates', 'notes'])
-        summ = table.groupby('group').sum()
+        table = pd.DataFrame(
+            row_collection, columns=["group", "hours", "dates", "notes"]
+        )
+        summ = table.groupby("group").sum()
         summ.sort_index(inplace=True, ascending=False)
         summ.loc[:, "dates"] = summ.dates.apply(set)
         summ.loc[:, "notes"] = summ.notes.apply(set)
         summ.loc[:, "avg.hours"] = summ.hours / summ.dates.apply(len)
         summ = summ.reset_index()
-        row_collection = summ.to_dict(orient='records')
+        row_collection = summ.to_dict(orient="records")
         return row_collection
 
 
@@ -287,9 +301,9 @@ def display_summary_table(summary_dict: list[dict], limit=10):
     table.add_column("Avg Hours", style="dim")  # Nueva columna
 
     for i, row in enumerate(summary_dict):
-        day = row['group']
-        total_hours = row['hours']
-        dates = row['dates']
+        day = row["group"]
+        total_hours = row["hours"]
+        dates = row["dates"]
         nobs = len(dates)
 
         total_hours_str = format_time(total_hours)
@@ -363,7 +377,6 @@ class Takt:
     scenarios involving data aggregation and processing.
     """
 
-
     def __init__(self):
         self.row = FileRow
         self.filename = FILE_NAME
@@ -429,10 +442,10 @@ def check(notes: str = ""):
     timestamp = pd.Timestamp.now()
     last_kind = t.first_row()
     # infer kind
-    if last_kind is None or last_kind[KIND] == 'out':
-        kind = 'in'
+    if last_kind is None or last_kind[KIND] == "out":
+        kind = "in"
     else:
-        kind = 'out'
+        kind = "out"
     t.insert_row(timestamp, kind, notes)
     t.print_console(
         f"Check [bold magenta]{kind.upper()}[/] at {timestamp}", style="green"
@@ -464,8 +477,8 @@ def edit():
     Edit the records file.
     """
     editor = os.environ.get(
-        'EDITOR',
-        'vim',  # Vim by default
+        "EDITOR",
+        "vim",  # Vim by default
     )
     try:
         subprocess.run([editor, FILE_NAME])
@@ -481,7 +494,7 @@ def summary():
     Daily summary.
     """
     t = Takt()
-    summary_dict = t.aggregate(period='daily')
+    summary_dict = t.aggregate(period="daily")
     display_summary_table(summary_dict)
 
 
@@ -491,7 +504,7 @@ def wtd():
     Week to date summary.
     """
     t = Takt()
-    list_dict = t.aggregate(period='wtd')
+    list_dict = t.aggregate(period="wtd")
     display_summary_table(list_dict)
 
 
@@ -501,7 +514,7 @@ def ytd():
     Year to date summary.
     """
     t = Takt()
-    list_dict = t.aggregate(period='ytd')
+    list_dict = t.aggregate(period="ytd")
     display_summary_table(list_dict)
 
 
@@ -511,7 +524,7 @@ def mtd():
     Month to date summary.
     """
     t = Takt()
-    summary_dict = t.aggregate(period='mtd')
+    summary_dict = t.aggregate(period="mtd")
     display_summary_table(summary_dict)
 
 
