@@ -30,12 +30,21 @@ Authors
 -------
 - Max Greco (mmngreco@gmail.com)
 
+TODO
+----
+- Allow multiple out table formats (e.g., CSV, JSON, TABLE, MD, etc.)
+- Add option to read partial records (e.g., last 10 records)
+
 License
 -------
 MIT License
 """
+
 import os
 import subprocess
+from typing import Callable
+from typer.core import TyperGroup
+import re
 
 import pandas as pd
 import typer
@@ -43,11 +52,10 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer()
 console = Console()
 
-DEFAULT_FILE = '~/.takt_file.csv'
-FILE_NAME = os.path.expanduser(os.getenv('TAKT_FILE', DEFAULT_FILE))
+DEFAULT_FILE = "~/.takt_file.csv"
+FILE_NAME = os.path.expanduser(os.getenv("TAKT_FILE", DEFAULT_FILE))
 
 TIMESTAMP = "timestamp"
 KIND = "kind"
@@ -71,9 +79,7 @@ def load_plugins(prefix):
             try:
                 module = importlib.import_module(name)
             except Exception as e:
-                console.print(
-                    f"\n[red]WARNING:[/] Plugin '{name}' not imported: {e}"
-                )
+                console.print(f"\n[red]WARNING:[/] Plugin '{name}' not imported: {e}")
                 module = None
             out[name] = module
     # modules_list = list(pkgutil.iter_modules())
@@ -100,25 +106,21 @@ class FileManager:
             return data
         # clean trailing spaces
         data = strip_values(data)[self.columns]
-        data.fillna('', inplace=True)
-        data.timestamp = data.timestamp.apply(pd.Timestamp).astype(
-            "datetime64[ns]"
-        )
+        data.fillna("", inplace=True)
+        data.timestamp = data.timestamp.apply(pd.Timestamp).astype("datetime64[ns]")
         return data
 
     def exists(self, create=True):
         if Path(self.filename).exists():
             return True
         if create:
-            pd.DataFrame(columns=self.columns).to_csv(
-                self.filename, index=False
-            )
+            pd.DataFrame(columns=self.columns).to_csv(self.filename, index=False)
             return True
         return False
 
     def load(self, nrows=None) -> list[dict[str, float | str]]:
         data = self.read(nrows=nrows)
-        return data.to_dict('records')
+        return data.to_dict("records")
 
     def save(self, records):
         data = pd.DataFrame(records)[self.columns]
@@ -133,14 +135,14 @@ class FileManager:
         data = self.read(nrows=1)
         if data.empty:
             return None
-        return data.to_dict('records')[0]
+        return data.to_dict("records")[0]
 
     def records_of_week(self, year, week):
         df = self.read()
         df[TIMESTAMP] = pd.to_datetime(df[TIMESTAMP])
-        df['week'] = df[TIMESTAMP].dt.strftime('%U')
-        df['year'] = df[TIMESTAMP].dt.year
-        return df[(df['week'] == str(week)) & (df['year'] == year)]
+        df["week"] = df[TIMESTAMP].dt.strftime("%U")
+        df["year"] = df[TIMESTAMP].dt.year
+        return df[(df["week"] == str(week)) & (df["year"] == year)]
 
 
 class DailyRef:
@@ -177,21 +179,21 @@ class MonthRef:
 
 
 class Aggregator:
-    def __init__(self, period: str = 'daily'):
+    def __init__(self, period: str = "daily"):
         self.period = period
-        if period == 'wtd':
+        self.deferred = []
+        if period == "wtd":
             self.time_agg = WeekRef.group
-        elif period == 'ytd':
+        elif period == "ytd":
             self.time_agg = YearRef.group
-        elif period == 'mtd':
+        elif period == "mtd":
             self.time_agg = MonthRef.group
-        elif period == 'daily':
+        elif period == "daily":
             self.time_agg = DailyRef.group
         else:
             raise ValueError(f"Period {period} not supported.")
 
-    @staticmethod
-    def infer_last_out(records):
+    def infer_last_out(self, records):
         if records[0][KIND] == "in":
             new_record = {
                 KIND: "out",
@@ -199,8 +201,12 @@ class Aggregator:
                 NOTES: "Inferred by takt.",
             }
             records.insert(0, new_record)
-            msg = "NOTE: Last out was inferred using `Timestamp.now()`."
-            console.print(msg)
+
+            def deferred():
+                msg = "NOTE: Last out was inferred using `Timestamp.now()`."
+                console.print(msg)
+
+            self.deferred.append(deferred)
         return records
 
     def calculate(self, records: list[dict]) -> list[dict]:
@@ -214,14 +220,16 @@ class Aggregator:
             timestamp = record[TIMESTAMP]
 
             # update variables
-            if record[KIND] == 'in':
+            if record[KIND] == "in":
                 last_in_time = timestamp
             else:
                 last_out_time = timestamp
 
             if last_in_time and last_out_time:
                 group_by = self.time_agg(timestamp)
-                total_hours = (last_out_time - last_in_time).total_seconds() * SECONDS_TO_HOURS
+                total_hours = (
+                    last_out_time - last_in_time
+                ).total_seconds() * SECONDS_TO_HOURS
                 date = timestamp.date()
                 note = record[NOTES]
 
@@ -233,14 +241,16 @@ class Aggregator:
                 last_out_time = None
 
         # aggregate to pandas
-        table = pd.DataFrame(row_collection, columns=['group', 'hours', 'dates', 'notes'])
-        summ = table.groupby('group').sum()
+        table = pd.DataFrame(
+            row_collection, columns=["group", "hours", "dates", "notes"]
+        )
+        summ = table.groupby("group").sum()
         summ.sort_index(inplace=True, ascending=False)
         summ.loc[:, "dates"] = summ.dates.apply(set)
         summ.loc[:, "notes"] = summ.notes.apply(set)
         summ.loc[:, "avg.hours"] = summ.hours / summ.dates.apply(len)
         summ = summ.reset_index()
-        row_collection = summ.to_dict(orient='records')
+        row_collection = summ.to_dict(orient="records")
         return row_collection
 
 
@@ -287,9 +297,9 @@ def display_summary_table(summary_dict: list[dict], limit=10):
     table.add_column("Avg Hours", style="dim")  # Nueva columna
 
     for i, row in enumerate(summary_dict):
-        day = row['group']
-        total_hours = row['hours']
-        dates = row['dates']
+        day = row["group"]
+        total_hours = row["hours"]
+        dates = row["dates"]
         nobs = len(dates)
 
         total_hours_str = format_time(total_hours)
@@ -363,12 +373,26 @@ class Takt:
     scenarios involving data aggregation and processing.
     """
 
-
     def __init__(self):
         self.row = FileRow
         self.filename = FILE_NAME
         self._file_manager = None
         self._aggregator = None
+        self._deferred: list[Callable] = []
+
+    def deferred(self):
+        deferred = self._deferred
+
+        class Deferred:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                for f in deferred:
+                    f()
+                deferred[:] = []
+
+        return Deferred()
 
     @property
     def file_manager(self):
@@ -396,9 +420,11 @@ class Takt:
 
     def aggregate(self, period: str = "daily") -> list[dict]:
         """Aggregate records."""
-        aggregator = Aggregator(period)
+        agg = Aggregator(period)
         records = self.all_rows()
-        return aggregator.calculate(records)
+        out = agg.calculate(records)
+        self._deferred.extend(agg.deferred)
+        return out
 
     @staticmethod
     def register(*args, plugin_name=None, **kwargs):
@@ -420,7 +446,24 @@ class Takt:
         console.print(msg, style=style)
 
 
-@app.command()
+class AliasGroup(TyperGroup):
+    _CMD_SPLIT_P = re.compile(r", ?")
+
+    def get_command(self, ctx, cmd_name):
+        cmd_name = self._group_cmd_name(cmd_name)
+        return super().get_command(ctx, cmd_name)
+
+    def _group_cmd_name(self, default_name):
+        for cmd in self.commands.values():
+            if cmd.name and default_name in re.split(self._CMD_SPLIT_P, cmd.name):
+                return cmd.name
+        return default_name
+
+
+app = typer.Typer(cls=AliasGroup)
+
+
+@app.command("check, c")
 def check(notes: str = ""):
     """
     Check in or out.
@@ -429,17 +472,17 @@ def check(notes: str = ""):
     timestamp = pd.Timestamp.now()
     last_kind = t.first_row()
     # infer kind
-    if last_kind is None or last_kind[KIND] == 'out':
-        kind = 'in'
+    if last_kind is None or last_kind[KIND] == "out":
+        kind = "in"
     else:
-        kind = 'out'
+        kind = "out"
     t.insert_row(timestamp, kind, notes)
     t.print_console(
         f"Check [bold magenta]{kind.upper()}[/] at {timestamp}", style="green"
     )
 
 
-@app.command()
+@app.command("display, d")
 def display():
     """
     Show all records.
@@ -458,61 +501,63 @@ def display():
     t.print_console(table)
 
 
-@app.command()
+@app.command("edit, e")
 def edit():
     """
     Edit the records file.
     """
     editor = os.environ.get(
-        'EDITOR',
-        'vim',  # Vim by default
+        "EDITOR",
+        "vim",  # Vim by default
     )
     try:
         subprocess.run([editor, FILE_NAME])
     except FileNotFoundError:
-        typer.echo(
-            f"`{editor}` not found, check if it is installed and accessible."
-        )
+        typer.echo(f"`{editor}` not found, check if it is installed and accessible.")
 
 
-@app.command()
+@app.command("day, summary, s")
 def summary():
     """
     Daily summary.
     """
     t = Takt()
-    summary_dict = t.aggregate(period='daily')
-    display_summary_table(summary_dict)
+    with t.deferred():
+        summary_dict = t.aggregate(period="daily")
+        display_summary_table(summary_dict)
 
 
-@app.command()
+@app.command("week, wtd, w")
 def wtd():
     """
     Week to date summary.
     """
     t = Takt()
-    list_dict = t.aggregate(period='wtd')
-    display_summary_table(list_dict)
+    with t.deferred():
+        list_dict = t.aggregate(period="wtd")
+        display_summary_table(list_dict)
 
 
-@app.command()
+@app.command("year, ytd, y")
 def ytd():
     """
     Year to date summary.
     """
     t = Takt()
-    list_dict = t.aggregate(period='ytd')
-    display_summary_table(list_dict)
+    with t.deferred():
+        list_dict = t.aggregate(period="ytd")
+        display_summary_table(list_dict)
 
 
-@app.command()
+@app.command("month, mtd, m")
 def mtd():
     """
     Month to date summary.
     """
     t = Takt()
-    summary_dict = t.aggregate(period='mtd')
-    display_summary_table(summary_dict)
+    with t.deferred():
+        summary_dict = t.aggregate(period="mtd")
+        display_summary_table(summary_dict)
 
 
 plugins = load_plugins("takt_")
