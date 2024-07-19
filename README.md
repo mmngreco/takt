@@ -34,18 +34,14 @@ pip install .
 takt --help
 ```
 
-### Commands
-
-- `help`: Displays help message.
-- `check`: Logs the check-in or check-out time.
-- `summary`: Exports the logs to a CSV file.
-
 ## Examples
 
 ### Logging time
 
 ```bash
-takt check
+takt check    # in/out entry in the log file
+takt display  # show the log file
+takt edit     # edit the log file
 ```
 
 
@@ -53,6 +49,8 @@ takt check
 
 ```bash
 takt summary
+takt wtd  # week to date
+takt mtd  # month to date
 ```
 
 
