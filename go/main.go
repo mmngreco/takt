@@ -164,10 +164,8 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 	var lastOutTime time.Time
 	for _, record := range records {
-		fmt.Printf("%+v\n", record)
 		if record.Kind == "out" {
 			lastOutTime = record.Timestamp
-			fmt.Println("lastOutTime", lastOutTime)
 		} else if record.Kind == "in" && !lastOutTime.IsZero() {
 			groupKey := groupFunc(record.Timestamp)
 			// lastOutTime - lastInTime
@@ -187,8 +185,6 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 				}
 			}
 			lastOutTime = time.Time{} // reset
-			fmt.Println("duration", duration)
-			fmt.Println("lastOutTime", lastOutTime)
 		}
 	}
 
@@ -285,7 +281,7 @@ func checkAction(notes string) {
 	}
 
 	timestamp := time.Now().Format(timeFormat)
-	line := fmt.Sprintf("%s, %s, %s", timestamp, kind, notes)
+	line := fmt.Sprintf("%s,%s,%s", timestamp, kind, notes)
 	if err := writeRecords(fileName, line); err != nil {
 		fmt.Println("Error:", err)
 	}
