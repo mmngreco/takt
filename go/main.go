@@ -125,7 +125,7 @@ type AggregatedRecord struct {
 }
 
 // const timeFormat = time.RFC3339
-const timeFormat = "2006-01-02 15:04:05"
+const timeFormat = "2006-01-02T15:04:05"
 
 func calculateDuration(records []Record, period string) ([]AggregatedRecord, error) {
 	if len(records) == 0 {
@@ -162,13 +162,16 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]AggregatedRecord {
 	aggregations := make(map[string]AggregatedRecord)
 
-	var lastInTime time.Time
+	var lastOutTime time.Time
 	for _, record := range records {
+		fmt.Printf("%+v\n", record)
 		if record.Kind == "out" {
-			lastInTime = record.Timestamp
-		} else if record.Kind == "in" && !lastInTime.IsZero() {
+			lastOutTime = record.Timestamp
+			fmt.Println("lastOutTime", lastOutTime)
+		} else if record.Kind == "in" && !lastOutTime.IsZero() {
 			groupKey := groupFunc(record.Timestamp)
-			duration := record.Timestamp.Sub(lastInTime).Hours()
+			// lastOutTime - lastInTime
+			duration := lastOutTime.Sub(record.Timestamp).Hours()
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
@@ -183,7 +186,9 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 					Notes:      []string{record.Notes},
 				}
 			}
-			lastInTime = time.Time{} // reset
+			lastOutTime = time.Time{} // reset
+			fmt.Println("duration", duration)
+			fmt.Println("lastOutTime", lastOutTime)
 		}
 	}
 
