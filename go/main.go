@@ -177,17 +177,15 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 	var lastOutTime time.Time
 	for _, record := range records {
-		fmt.Printf("=== %+v\n", record)
 		if record.Kind == "out" {
-			fmt.Println("out")
 			lastOutTime = record.Timestamp
 		} else if record.Kind == "in" && !lastOutTime.IsZero() {
 			groupKey := groupFunc(record.Timestamp)
 			// lastOutTime - lastInTime
-			fmt.Printf("lastOutTime: %+v\n", lastOutTime)
-			fmt.Printf("lastInTime: %+v\n", record.Timestamp)
 			duration := lastOutTime.Sub(record.Timestamp).Hours()
-			fmt.Printf("duration: %f\n", duration)
+			// fmt.Printf("lastOutTime: %+v\n", lastOutTime)
+			// fmt.Printf("lastInTime: %+v\n", record.Timestamp)
+			// fmt.Printf("duration: %f\n", duration)
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
