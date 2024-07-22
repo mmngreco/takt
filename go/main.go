@@ -9,12 +9,17 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
 const fileName = "csvfile.csv"
+
+// const timeFormat = time.RFC3339
+const timeFormat = "2006-01-02T15:04:05"
+const outDateFormat = "2006-01-02"
 
 var header = []string{"timestamp", "kind", "notes"}
 
@@ -77,7 +82,14 @@ var summaryCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		agg, err := calculateDuration(records, "daily")
-		for _, a := range agg {
+		// Sorting by timestamp assuming Group is in a parseable time format
+		sort.Slice(agg, func(i, j int) bool {
+			t1, _ := time.Parse(time.RFC3339, agg[i].Group)
+			t2, _ := time.Parse(time.RFC3339, agg[j].Group)
+			return t1.Before(t2)
+		})
+		for i := 0; i < len(agg); i++ {
+			a := agg[i]
 			fmt.Printf("%s: %.2f hours\n", a.Group, a.TotalHours)
 		}
 	},
@@ -124,9 +136,6 @@ type AggregatedRecord struct {
 	AverageHours float64
 }
 
-// const timeFormat = time.RFC3339
-const timeFormat = "2006-01-02T15:04:05"
-
 func calculateDuration(records []Record, period string) ([]AggregatedRecord, error) {
 	if len(records) == 0 {
 		return nil, errors.New("no records to process")
@@ -135,22 +144,31 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 	inferLastOut(&records)
 
 	var aggregations map[string]AggregatedRecord
+	var labeler func(time.Time) string
+
 	switch period {
 	case "daily":
-		aggregations = aggregateBy(records, func(t time.Time) string { return t.Format("2006-01-02") })
+		labeler = func(t time.Time) string {
+			return t.Format("2006-01-02")
+		}
 	case "weekly":
-		aggregations = aggregateBy(records, func(t time.Time) string {
+		labeler = func(t time.Time) string {
 			year, week := t.ISOWeek()
 			return fmt.Sprintf("%d-W%02d", year, week)
-		})
+		}
 	case "monthly":
-		aggregations = aggregateBy(records, func(t time.Time) string { return t.Format("2006-01") })
+		labeler = func(t time.Time) string {
+			return t.Format("2006-01")
+		}
 	case "yearly":
-		aggregations = aggregateBy(records, func(t time.Time) string { return t.Format("2006") })
+		labeler = func(t time.Time) string {
+			return t.Format("2006")
+		}
 	default:
 		return nil, fmt.Errorf("unsupported period: %s", period)
 	}
 
+	aggregations = aggregateBy(records, labeler)
 	var result []AggregatedRecord
 	for _, v := range aggregations {
 		v.AverageHours = v.TotalHours / float64(len(v.Dates))
@@ -173,14 +191,14 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
-				agg.Dates = append(agg.Dates, record.Timestamp.Format("2006-01-02"))
+				agg.Dates = append(agg.Dates, record.Timestamp.Format(outDateFormat))
 				agg.Notes = append(agg.Notes, record.Notes)
 				aggregations[groupKey] = agg
 			} else {
 				aggregations[groupKey] = AggregatedRecord{
 					Group:      groupKey,
 					TotalHours: duration,
-					Dates:      []string{record.Timestamp.Format("2006-01-02")},
+					Dates:      []string{record.Timestamp.Format(outDateFormat)},
 					Notes:      []string{record.Notes},
 				}
 			}
@@ -194,6 +212,7 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 func inferLastOut(records *[]Record) int {
 	if len(*records) > 0 && (*records)[0].Kind == "in" {
 		*records = append([]Record{{Timestamp: time.Now(), Kind: "out", Notes: "Inferred by takt."}}, *records...)
+		fmt.Println("Inferred last out.")
 		return 1
 	}
 	return 0
