@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -82,12 +81,7 @@ var summaryCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		agg, err := calculateDuration(records, "daily")
-		// Sorting by timestamp assuming Group is in a parseable time format
-		sort.Slice(agg, func(i, j int) bool {
-			t1, _ := time.Parse(time.RFC3339, agg[i].Group)
-			t2, _ := time.Parse(time.RFC3339, agg[j].Group)
-			return t1.Before(t2)
-		})
+
 		for i := 0; i < len(agg); i++ {
 			a := agg[i]
 			fmt.Printf("%s: %.2f hours\n", a.Group, a.TotalHours)
@@ -169,12 +163,13 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 	}
 
 	aggregations = aggregateBy(records, labeler)
-	var result []AggregatedRecord
+	var out []AggregatedRecord
 	for _, v := range aggregations {
+		fmt.Printf("%+v\n", v)
 		v.AverageHours = v.TotalHours / float64(len(v.Dates))
-		result = append(result, v)
+		out = append(out, v)
 	}
-	return result, nil
+	return out, nil
 }
 
 func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]AggregatedRecord {
@@ -182,12 +177,17 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 	var lastOutTime time.Time
 	for _, record := range records {
+		fmt.Printf("=== %+v\n", record)
 		if record.Kind == "out" {
+			fmt.Println("out")
 			lastOutTime = record.Timestamp
 		} else if record.Kind == "in" && !lastOutTime.IsZero() {
 			groupKey := groupFunc(record.Timestamp)
 			// lastOutTime - lastInTime
+			fmt.Printf("lastOutTime: %+v\n", lastOutTime)
+			fmt.Printf("lastInTime: %+v\n", record.Timestamp)
 			duration := lastOutTime.Sub(record.Timestamp).Hours()
+			fmt.Printf("duration: %f\n", duration)
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
@@ -211,8 +211,16 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 func inferLastOut(records *[]Record) int {
 	if len(*records) > 0 && (*records)[0].Kind == "in" {
-		*records = append([]Record{{Timestamp: time.Now(), Kind: "out", Notes: "Inferred by takt."}}, *records...)
+		record := []Record{
+			{
+				Timestamp: time.Now().UTC(),
+				Kind:      "out",
+				Notes:     "Inferred by takt.",
+			},
+		}
+		*records = append(record, *records...)
 		fmt.Println("Inferred last out.")
+		fmt.Printf("%+v\n", record)
 		return 1
 	}
 	return 0
