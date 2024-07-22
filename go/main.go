@@ -124,7 +124,8 @@ type AggregatedRecord struct {
 	AverageHours float64
 }
 
-const timeFormat = time.RFC3339
+// const timeFormat = time.RFC3339
+const timeFormat = "2006-01-02 15:04:05"
 
 func calculateDuration(records []Record, period string) ([]AggregatedRecord, error) {
 	if len(records) == 0 {
