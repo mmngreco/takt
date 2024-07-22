@@ -16,9 +16,9 @@ import (
 
 const fileName = "csvfile.csv"
 
-// const timeFormat = time.RFC3339
-const timeFormat = "2006-01-02T15:04:05"
-const outDateFormat = "2006-01-02"
+const timeFormat = time.RFC3339
+
+const printDateFormat = "2006-01-02"
 
 var header = []string{"timestamp", "kind", "notes"}
 
@@ -191,14 +191,14 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
-				agg.Dates = append(agg.Dates, record.Timestamp.Format(outDateFormat))
+				agg.Dates = append(agg.Dates, record.Timestamp.Format(printDateFormat))
 				agg.Notes = append(agg.Notes, record.Notes)
 				aggregations[groupKey] = agg
 			} else {
 				aggregations[groupKey] = AggregatedRecord{
 					Group:      groupKey,
 					TotalHours: duration,
-					Dates:      []string{record.Timestamp.Format(outDateFormat)},
+					Dates:      []string{record.Timestamp.Format(printDateFormat)},
 					Notes:      []string{record.Notes},
 				}
 			}
@@ -213,7 +213,7 @@ func inferLastOut(records *[]Record) int {
 	if len(*records) > 0 && (*records)[0].Kind == "in" {
 		record := []Record{
 			{
-				Timestamp: time.Now().UTC(),
+				Timestamp: time.Now(),
 				Kind:      "out",
 				Notes:     "Inferred by takt.",
 			},
