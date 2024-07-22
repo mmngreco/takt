@@ -36,7 +36,7 @@ var checkCmd = &cobra.Command{
 		if len(args) > 0 {
 			notes = args[0]
 		}
-		checkAction(notes)
+		checkAction(fileName, notes)
 	},
 }
 
@@ -75,17 +75,7 @@ var summaryCmd = &cobra.Command{
 	Aliases: []string{"s"},
 	Short:   "Daily summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		println("summary")
-		records, err := readRecords(-1)
-		if err != nil {
-			log.Fatal(err)
-		}
-		agg, err := calculateDuration(records, "daily")
-
-		for i := 0; i < len(agg); i++ {
-			a := agg[i]
-			fmt.Printf("%s: %.2f hours\n", a.Group, a.TotalHours)
-		}
+		summary("daily")
 	},
 }
 
@@ -94,7 +84,7 @@ var wtdCmd = &cobra.Command{
 	Aliases: []string{"w"},
 	Short:   "Week to date summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		println("wtd")
+		summary("weekly")
 	},
 }
 
@@ -103,7 +93,7 @@ var mtdCmd = &cobra.Command{
 	Aliases: []string{"m"},
 	Short:   "Month to date summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		println("mtd")
+		summary("monthly")
 	},
 }
 
@@ -112,7 +102,7 @@ var ytdCmd = &cobra.Command{
 	Aliases: []string{"y"},
 	Short:   "Year to date summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		println("ytd")
+		summary("yearly")
 	},
 }
 
@@ -128,6 +118,20 @@ type AggregatedRecord struct {
 	Dates        []string
 	Notes        []string
 	AverageHours float64
+}
+
+func summary(offset string) {
+	println(offset)
+	records, err := readRecords(-1)
+	if err != nil {
+		log.Fatal(err)
+	}
+	agg, err := calculateDuration(records, offset)
+
+	for i := 0; i < len(agg); i++ {
+		a := agg[i]
+		fmt.Printf("%s: %.2f hours\n", a.Group, a.TotalHours)
+	}
 }
 
 func calculateDuration(records []Record, period string) ([]AggregatedRecord, error) {
@@ -165,7 +169,6 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 	aggregations = aggregateBy(records, labeler)
 	var out []AggregatedRecord
 	for _, v := range aggregations {
-		fmt.Printf("%+v\n", v)
 		v.AverageHours = v.TotalHours / float64(len(v.Dates))
 		out = append(out, v)
 	}
@@ -181,11 +184,7 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 			lastOutTime = record.Timestamp
 		} else if record.Kind == "in" && !lastOutTime.IsZero() {
 			groupKey := groupFunc(record.Timestamp)
-			// lastOutTime - lastInTime
 			duration := lastOutTime.Sub(record.Timestamp).Hours()
-			// fmt.Printf("lastOutTime: %+v\n", lastOutTime)
-			// fmt.Printf("lastInTime: %+v\n", record.Timestamp)
-			// fmt.Printf("duration: %f\n", duration)
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
@@ -217,8 +216,6 @@ func inferLastOut(records *[]Record) int {
 			},
 		}
 		*records = append(record, *records...)
-		fmt.Println("Inferred last out.")
-		fmt.Printf("%+v\n", record)
 		return 1
 	}
 	return 0
@@ -246,10 +243,14 @@ func createFile() {
 	}
 }
 
+func readRecords(nrows int) ([]Record, error) {
+	return readRecordsFromFile(fileName, nrows)
+}
+
 // readRecords reads nrows records from the file
 // if nrows is -1, read all records.
 // skip the header.
-func readRecords(nrows int) ([]Record, error) {
+func readRecordsFromFile(fileName string, nrows int) ([]Record, error) {
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
 		createFile()
 	}
@@ -291,8 +292,8 @@ func readRecords(nrows int) ([]Record, error) {
 	return records, nil
 }
 
-func checkAction(notes string) {
-	records, err := readRecords(1)
+func checkAction(filename, notes string) {
+	records, err := readRecordsFromFile(filename, 1)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -307,7 +308,7 @@ func checkAction(notes string) {
 
 	timestamp := time.Now().Format(timeFormat)
 	line := fmt.Sprintf("%s,%s,%s", timestamp, kind, notes)
-	if err := writeRecords(fileName, line); err != nil {
+	if err := writeRecords(filename, line); err != nil {
 		fmt.Println("Error:", err)
 	}
 
