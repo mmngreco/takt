@@ -109,40 +109,42 @@ func TestReadRecords(t *testing.T) {
 	}
 }
 
-// func TestCheckAction(t *testing.T) {
-//     // Create a temporary file to simulate the CSV records file
-//     // You may need to specify a unique temp file for concurrent tests.
-//     tempFile, err := os.CreateTemp("", "test_checkAction.csv")
-//     if err != nil {
-//         t.Fatalf("Failed to create temp file: %v", err)
-//     }
-//     defer os.Remove(tempFile.Name()) // clean up
-//
-//     // Write initial record to the temp file
-//     csvContent := "timestamp,kind,notes\n"
-//     if _, err := tempFile.WriteString(csvContent); err != nil {
-//         t.Fatalf("Failed to write to temp file: %v", err)
-//     }
-//     tempFile.Close()
-//
-//     checkAction(tempFile.Name(), "Test Note")
-//
-//     // Read the modified file content
-//     modifiedFile, err := os.Open(tempFile.Name())
-//     if err != nil {
-//         t.Fatalf("Failed to open modified temp file: %v", err)
-//     }
-//     defer modifiedFile.Close()
-//
-//     var gotCsvContent []byte
-//     if gotCsvContent, err = os.ReadFile(modifiedFile.Name()); err != nil {
-//         t.Fatalf("Failed to read modified temp file: %v", err)
-//     }
-//
-//     if len(gotCsvContent) == len(csvContent) {
-//         t.Errorf("Expected modified file content, but no changes detected")
-//     }
-// }
+// TODO:
+func TestCheckAction(t *testing.T) {
+	// Create a temporary file to simulate the CSV records file
+	// You may need to specify a unique temp file for concurrent tests.
+	tempFile, err := os.CreateTemp("", "test_checkAction.csv")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name()) // clean up
+
+	// Write initial record to the temp file
+	csvContent := "timestamp,kind,notes\n"
+	if _, err := tempFile.WriteString(csvContent); err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	tempFile.Close()
+
+	checkAction(tempFile.Name(), "Test Note")
+
+	// Read the modified file content
+	modifiedFile, err := os.Open(tempFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to open modified temp file: %v", err)
+	}
+	defer modifiedFile.Close()
+
+	var gotCsvContent []byte
+	if gotCsvContent, err = os.ReadFile(modifiedFile.Name()); err != nil {
+		t.Fatalf("Failed to read modified temp file: %v", err)
+	}
+
+	if len(gotCsvContent) == len(csvContent) {
+		t.Errorf("Expected modified file content, but no changes detected")
+	}
+}
+
 //
 // func TestWriteRecords(t *testing.T) {
 // 	tempFileName := "testfile.csv"
