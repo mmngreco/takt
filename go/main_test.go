@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -109,7 +110,7 @@ func TestReadRecords(t *testing.T) {
 	}
 }
 
-// TODO:
+// TODO: improve this
 func TestCheckAction(t *testing.T) {
 	// Create a temporary file to simulate the CSV records file
 	// You may need to specify a unique temp file for concurrent tests.
@@ -135,22 +136,31 @@ func TestCheckAction(t *testing.T) {
 	}
 	defer modifiedFile.Close()
 
-	var gotCsvContent []byte
-	if gotCsvContent, err = os.ReadFile(modifiedFile.Name()); err != nil {
+	var _gotCsvContent []byte
+	if _gotCsvContent, err = os.ReadFile(modifiedFile.Name()); err != nil {
 		t.Fatalf("Failed to read modified temp file: %v", err)
 	}
+	gotCsvContentList := strings.Split(string(_gotCsvContent), "\n")
 
-	if len(gotCsvContent) == len(csvContent) {
-		t.Errorf("Expected modified file content, but no changes detected")
+	if len(gotCsvContentList) == len(csvContent) {
+		t.Errorf("Expected modified file content, but no changes detected \nGot:\n%+v\n\nExpected:\n%+v", gotCsvContentList, csvContent)
 	}
 }
 
-//
 // func TestWriteRecords(t *testing.T) {
-// 	tempFileName := "testfile.csv"
+// 	tempFileName := "/tmp/testfile.csv"
+// 	// create file
+// 	_, err := os.Create(tempFileName)
+// 	if err != nil {
+// 		t.Fatalf("Failed to create test file: %v", err)
+// 	}
 // 	defer os.Remove(tempFileName) // cleanup after test
 //
-// 	err := writeRecords(tempFileName, "2021-01-01T00:00:00Z,in,Test Note")
+// 	err = writeRecords(tempFileName, strings.Join(header, ","))
+// 	if err != nil {
+// 		t.Fatalf("writeRecords() error: %v", err)
+// 	}
+// 	err = writeRecords(tempFileName, "2021-01-01T00:00:00Z,in,Test Note")
 // 	if err != nil {
 // 		t.Fatalf("writeRecords() error: %v", err)
 // 	}
@@ -162,6 +172,6 @@ func TestCheckAction(t *testing.T) {
 //
 // 	expected := "timestamp,kind,notes\n2021-01-01T00:00:00Z,in,Test Note\n"
 // 	if string(contents) != expected {
-// 		t.Errorf("File contents expected %s, got %s", expected, string(contents))
+// 		t.Errorf("File contents expected:\n%s\ngot:\n%s", expected, string(contents))
 // 	}
 // }

@@ -324,6 +324,7 @@ func writeRecords(fileName, newLine string) error {
 
 	newFile, err := os.CreateTemp("", "takt_tempfile.csv")
 	if err != nil {
+		fmt.Printf("Error: could not create temp file")
 		return err
 	}
 	defer newFile.Close()
@@ -331,12 +332,18 @@ func writeRecords(fileName, newLine string) error {
 	newWriter := bufio.NewWriter(newFile)
 	defer newWriter.Flush()
 	_, err = newWriter.WriteString(fmt.Sprintf("%s,%s,%s\n", header[0], header[1], header[2]))
+	if err != nil {
+		fmt.Printf("Error: could not write to temp file")
+		return err
+	}
 	_, err = newWriter.WriteString(newLine + "\n")
 	if err != nil {
+		fmt.Printf("Error: could not write to temp file")
 		return err
 	}
 
 	prevReader := bufio.NewReader(prevFile)
+
 	// drop the header
 	_, _, err = prevReader.ReadLine()
 	if err != nil {
@@ -346,8 +353,6 @@ func writeRecords(fileName, newLine string) error {
 	if err != nil {
 		return err
 	}
-
-	newWriter.Flush()
 
 	if err := os.Rename(newFile.Name(), fileName); err != nil {
 		return err
