@@ -13,11 +13,7 @@ help:  ## Display this help
 
 ##@ Setup
 $(venv):
-	@if [ -x "`command -v conda`" ]; then \
-		conda create --prefix $(venv) python=$(PYVER) -y -q; \
-	else \
-		python$(PYVER) -m venv $(venv); \
-	fi
+	python$(PYVER) -m venv $(venv);
 
 
 .PHONY: install
@@ -42,7 +38,7 @@ publish:  ## publish to origin
 ##@ Development
 .PHONY: dev
 dev: $(venv) ## install dev mode
-	$(pip) install -e . -r requirements-dev.txt
+	$(pip) install -e .
 
 .PHONY: test
 test: $(venv) ## run tests

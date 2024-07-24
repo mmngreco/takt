@@ -51,6 +51,8 @@ import typer
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
+from git import Repo
+
 
 console = Console()
 
@@ -143,6 +145,14 @@ class FileManager:
         df["week"] = df[TIMESTAMP].dt.strftime("%U")
         df["year"] = df[TIMESTAMP].dt.year
         return df[(df["week"] == str(week)) & (df["year"] == year)]
+
+    def commit(self, message="Commit by takt."):
+        p = Path(self.filename)
+        while not (p / ".git").exists():
+            p = p.parent
+        r = Repo(p)
+        r.git.add(self.filename)
+        r.git.commit("-m", message)
 
 
 class DailyRef:
@@ -559,6 +569,14 @@ def mtd():
         summary_dict = t.aggregate(period="mtd")
         display_summary_table(summary_dict)
 
+
+@app.command("commit, sync, cm")
+def commit(message="Commit by takt."):
+    """
+    if TAKT_FILE is in a git repository it will commit and push the changes.
+    """
+    t = Takt()
+    t.file_manager.commit(message)
 
 plugins = load_plugins("takt_")
 
