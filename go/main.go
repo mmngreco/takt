@@ -7,15 +7,30 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
-const fileName = "csvfile.csv"
+var fileName = getFileName("TAKT_FILE", "csvfile.csv")
+
+func getFileName(key, dflt string) string {
+	path := os.Getenv(key)
+	if path[:2] == "~/" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return dflt
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
 
 const timeFormat = time.RFC3339
 
@@ -42,8 +57,8 @@ var checkCmd = &cobra.Command{
 }
 
 var catCmd = &cobra.Command{
-	Use:     "display",
-	Aliases: []string{"d"},
+	Use:     "cat",
+	Aliases: []string{"display"},
 	Short:   "Show all records",
 	Run: func(cmd *cobra.Command, args []string) {
 		head := -1 // read all records
@@ -79,38 +94,70 @@ var editCmd = &cobra.Command{
 }
 
 var dailyCmd = &cobra.Command{
-	Use:     "summary",
-	Aliases: []string{"s"},
+	Use:     "day",
+	Aliases: []string{"d"},
 	Short:   "Daily summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		summary("daily")
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("daily", head)
 	},
 }
 
 var weekCmd = &cobra.Command{
-	Use:     "wtd",
+	Use:     "week",
 	Aliases: []string{"w"},
 	Short:   "Week to date summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		summary("weekly")
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("weekly", head)
 	},
 }
 
 var monthCmd = &cobra.Command{
-	Use:     "mtd",
+	Use:     "month",
 	Aliases: []string{"m"},
 	Short:   "Month to date summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		summary("monthly")
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("monthly", head)
 	},
 }
 
 var yearCmd = &cobra.Command{
-	Use:     "ytd",
+	Use:     "year",
 	Aliases: []string{"y"},
 	Short:   "Year to date summary",
 	Run: func(cmd *cobra.Command, args []string) {
-		summary("yearly")
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("yearly", head)
 	},
 }
 
@@ -128,7 +175,34 @@ type AggregatedRecord struct {
 	AverageHours float64
 }
 
-func summary(offset string) {
+func sortedKeys(m map[string]AggregatedRecord) []string {
+	// Crear un slice para las claves
+	keys := make([]string, 0, len(m))
+
+	// Agregar las claves al slice
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	// Ordenar las claves
+	sort.Strings(keys)
+
+	// invert the order
+	out := make([]string, 0, len(keys))
+	for i := len(keys) - 1; i >= 0; i-- {
+		out = append(out, keys[i])
+	}
+
+	return out
+}
+
+func hoursToText(totalHours float64) string {
+	hours := int(totalHours)
+	minutes := int(math.Round((totalHours - float64(hours)) * 60))
+	return fmt.Sprintf("%d:%02d", hours, minutes)
+}
+
+func summary(offset string, head int) {
 	println(offset)
 	records, err := readRecords(-1)
 	if err != nil {
@@ -139,9 +213,14 @@ func summary(offset string) {
 		log.Fatalf("error calculating duration: %v", err)
 	}
 
-	for i := 0; i < len(agg); i++ {
+	if head < 1 {
+		head = len(agg)
+	}
+
+	for i := 0; i < head; i++ {
 		a := agg[i]
-		fmt.Printf("%s: %.2f hours\n", a.Group, a.TotalHours)
+		hhmm := hoursToText(a.TotalHours)
+		fmt.Printf("%s: %s hours\n", a.Group, hhmm)
 	}
 }
 
@@ -179,7 +258,9 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 
 	aggregations = aggregateBy(records, labeler)
 	var out []AggregatedRecord
-	for _, v := range aggregations {
+	keys := sortedKeys(aggregations)
+	for _, k := range keys {
+		v := aggregations[k]
 		v.AverageHours = v.TotalHours / float64(len(v.Dates))
 		out = append(out, v)
 	}
@@ -254,8 +335,8 @@ func createFile() {
 	}
 }
 
-func readRecords(nrows int) ([]Record, error) {
-	return readRecordsFromFile(fileName, nrows)
+func readRecords(head int) ([]Record, error) {
+	return readRecordsFromFile(fileName, head)
 }
 
 // readRecords reads nrows records from the file
@@ -287,6 +368,8 @@ func readRecordsFromFile(fileName string, head int) ([]Record, error) {
 			line, err := reader.Read()
 			lines = append(lines, line)
 			if err != nil {
+				// NOTE: i can happen that the head is greater
+				// thant the number of lines in the file.
 				linesRead = i - 1 // avoid the header
 				break
 			}

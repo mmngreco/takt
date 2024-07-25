@@ -107,7 +107,8 @@ class FileManager:
         # clean trailing spaces
         data = strip_values(data)[self.columns]
         data.fillna("", inplace=True)
-        data.timestamp = data.timestamp.apply(pd.Timestamp).astype("datetime64[ns]")
+        f = lambda x: pd.Timestamp(x)
+        data.timestamp = data.timestamp.apply(f)
         return data
 
     def exists(self, create=True):
@@ -482,7 +483,7 @@ def check(notes: str = ""):
     )
 
 
-@app.command("display, d")
+@app.command("cat, display")
 def display():
     """
     Show all records.
@@ -516,8 +517,8 @@ def edit():
         typer.echo(f"`{editor}` not found, check if it is installed and accessible.")
 
 
-@app.command("day, summary, s")
-def summary():
+@app.command("day, d")
+def day():
     """
     Daily summary.
     """
@@ -528,7 +529,7 @@ def summary():
 
 
 @app.command("week, wtd, w")
-def wtd():
+def week():
     """
     Week to date summary.
     """
@@ -539,7 +540,7 @@ def wtd():
 
 
 @app.command("year, ytd, y")
-def ytd():
+def year():
     """
     Year to date summary.
     """
@@ -550,7 +551,7 @@ def ytd():
 
 
 @app.command("month, mtd, m")
-def mtd():
+def month():
     """
     Month to date summary.
     """
