@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -40,13 +41,20 @@ var checkCmd = &cobra.Command{
 	},
 }
 
-var displayCmd = &cobra.Command{
+var catCmd = &cobra.Command{
 	Use:     "display",
 	Aliases: []string{"d"},
 	Short:   "Show all records",
 	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: add flags to specify the number of records to display
-		records, err := readRecords(-1)
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		records, err := readRecords(head)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -70,7 +78,7 @@ var editCmd = &cobra.Command{
 	},
 }
 
-var summaryCmd = &cobra.Command{
+var dailyCmd = &cobra.Command{
 	Use:     "summary",
 	Aliases: []string{"s"},
 	Short:   "Daily summary",
@@ -79,7 +87,7 @@ var summaryCmd = &cobra.Command{
 	},
 }
 
-var wtdCmd = &cobra.Command{
+var weekCmd = &cobra.Command{
 	Use:     "wtd",
 	Aliases: []string{"w"},
 	Short:   "Week to date summary",
@@ -88,7 +96,7 @@ var wtdCmd = &cobra.Command{
 	},
 }
 
-var mtdCmd = &cobra.Command{
+var monthCmd = &cobra.Command{
 	Use:     "mtd",
 	Aliases: []string{"m"},
 	Short:   "Month to date summary",
@@ -97,7 +105,7 @@ var mtdCmd = &cobra.Command{
 	},
 }
 
-var ytdCmd = &cobra.Command{
+var yearCmd = &cobra.Command{
 	Use:     "ytd",
 	Aliases: []string{"y"},
 	Short:   "Year to date summary",
@@ -364,11 +372,11 @@ func writeRecords(fileName, newLine string) error {
 func init() {
 	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(editCmd)
-	rootCmd.AddCommand(displayCmd)
-	rootCmd.AddCommand(summaryCmd)
-	rootCmd.AddCommand(wtdCmd)
-	rootCmd.AddCommand(mtdCmd)
-	rootCmd.AddCommand(ytdCmd)
+	rootCmd.AddCommand(catCmd)
+	rootCmd.AddCommand(dailyCmd)
+	rootCmd.AddCommand(weekCmd)
+	rootCmd.AddCommand(monthCmd)
+	rootCmd.AddCommand(yearCmd)
 }
 
 func Execute() {
