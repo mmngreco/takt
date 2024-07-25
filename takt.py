@@ -148,8 +148,13 @@ class FileManager:
 
     def commit(self, message="Commit by takt."):
         p = Path(self.filename)
+
         while not (p / ".git").exists():
             p = p.parent
+            if p == Path.home():
+                console.print("No git repository found.")
+                return
+
         r = Repo(p)
         r.git.add(self.filename)
         r.git.commit("-m", message)
