@@ -135,6 +135,9 @@ func summary(offset string) {
 		log.Fatal(err)
 	}
 	agg, err := calculateDuration(records, offset)
+	if err != nil {
+		log.Fatalf("error calculating duration: %v", err)
+	}
 
 	for i := 0; i < len(agg); i++ {
 		a := agg[i]
@@ -258,7 +261,7 @@ func readRecords(nrows int) ([]Record, error) {
 // readRecords reads nrows records from the file
 // if nrows is -1, read all records.
 // skip the header.
-func readRecordsFromFile(fileName string, nrows int) ([]Record, error) {
+func readRecordsFromFile(fileName string, head int) ([]Record, error) {
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
 		createFile()
 	}
@@ -270,26 +273,28 @@ func readRecordsFromFile(fileName string, nrows int) ([]Record, error) {
 	reader := csv.NewReader(file)
 
 	lines := [][]string{}
+	linesRead := -1
 
-	if nrows == -1 {
+	if head == -1 {
 		// read all
 		lines, err = reader.ReadAll()
 		if err != nil {
 			return nil, fmt.Errorf("could not read CSV: %w", err)
 		}
 	} else {
-		// read first nrows
-		for i := 0; i < (nrows + 1); i++ {
+		// read n first nrows
+		for i := 0; i < (head + 1); i++ {
 			line, err := reader.Read()
 			lines = append(lines, line)
 			if err != nil {
-				return nil, fmt.Errorf("could not read CSV: %w", err)
+				linesRead = i - 1 // avoid the header
+				break
 			}
 		}
 	}
 
 	var records []Record
-	if nrows == 0 || len(lines) < 2 {
+	if head == 0 || linesRead == 0 || len(lines) < 2 {
 		return records, nil
 	}
 	for _, line := range lines[1:] {
