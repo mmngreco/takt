@@ -20,10 +20,10 @@ func TestCalculateDuration(t *testing.T) {
 		avgHrs  bool
 		wantErr bool
 	}{
-		{"daily", "daily", true, true, false},
-		{"weekly", "weekly", true, true, false},
-		{"monthly", "monthly", true, true, false},
-		{"yearly", "yearly", true, true, false},
+		{"day", "day", true, true, false},
+		{"week", "week", true, true, false},
+		{"month", "month", true, true, false},
+		{"year", "year", true, true, false},
 		{"unsupported", "unsupported", false, false, true},
 	}
 

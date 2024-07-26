@@ -20,16 +20,35 @@ import (
 
 var fileName = getFileName("TAKT_FILE", "csvfile.csv")
 
-func getFileName(key, dflt string) string {
-	path := os.Getenv(key)
+func absPath(path string) (string, error) {
 	if path[:2] == "~/" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return dflt
+			fmt.Println("Error: could not get user home directory")
+			return "", err
 		}
-		return filepath.Join(home, path[2:])
+		return filepath.Join(home, path[2:]), nil
 	}
-	return path
+	return path, nil
+}
+
+func getFileName(key, dflt string) string {
+	path := os.Getenv(key)
+
+	if path == "" {
+		out, err := absPath(dflt)
+		if err != nil {
+			return ""
+		}
+		return out
+	}
+
+	out, err := absPath(path)
+	if err != nil {
+		return ""
+	}
+	return out
+
 }
 
 const timeFormat = time.RFC3339
@@ -37,129 +56,6 @@ const timeFormat = time.RFC3339
 const printDateFormat = "2006-01-02"
 
 var header = []string{"timestamp", "kind", "notes"}
-
-var rootCmd = &cobra.Command{
-	Use:   "takt",
-	Short: "A Command Line Time Tracking Tool",
-}
-
-var checkCmd = &cobra.Command{
-	Use:     "check",
-	Aliases: []string{"c"},
-	Short:   "Check in or out",
-	Run: func(cmd *cobra.Command, args []string) {
-		notes := ""
-		if len(args) > 0 {
-			notes = args[0]
-		}
-		checkAction(fileName, notes)
-	},
-}
-
-var catCmd = &cobra.Command{
-	Use:     "cat",
-	Aliases: []string{"display"},
-	Short:   "Show all records",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		records, err := readRecords(head)
-		if err != nil {
-			log.Fatal(err)
-		}
-		printRecords(records)
-	},
-}
-
-var editCmd = &cobra.Command{
-	Use:     "edit",
-	Aliases: []string{"e"},
-	Short:   "Edit the records file",
-	Run: func(cmd *cobra.Command, args []string) {
-		editor := os.Getenv("EDITOR")
-		edit_cmd := exec.Command(editor, fileName)
-		edit_cmd.Stdin = os.Stdin
-		edit_cmd.Stdout = os.Stdout
-		err := edit_cmd.Run()
-		if err != nil {
-			log.Fatal(err)
-		}
-	},
-}
-
-var dailyCmd = &cobra.Command{
-	Use:     "day",
-	Aliases: []string{"d"},
-	Short:   "Daily summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("daily", head)
-	},
-}
-
-var weekCmd = &cobra.Command{
-	Use:     "week",
-	Aliases: []string{"w"},
-	Short:   "Week to date summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("weekly", head)
-	},
-}
-
-var monthCmd = &cobra.Command{
-	Use:     "month",
-	Aliases: []string{"m"},
-	Short:   "Month to date summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("monthly", head)
-	},
-}
-
-var yearCmd = &cobra.Command{
-	Use:     "year",
-	Aliases: []string{"y"},
-	Short:   "Year to date summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("yearly", head)
-	},
-}
 
 type Record struct {
 	Timestamp time.Time
@@ -197,13 +93,22 @@ func sortedKeys(m map[string]AggregatedRecord) []string {
 }
 
 func hoursToText(totalHours float64) string {
-	hours := int(totalHours)
-	minutes := int(math.Round((totalHours - float64(hours)) * 60))
-	return fmt.Sprintf("%d:%02d", hours, minutes)
+
+	if totalHours <= 0 {
+		return "00h00m"
+	} else if totalHours <= 24 {
+		hours := int(totalHours)
+		minutes := int(math.Round((float64(totalHours) - float64(hours)) * 60))
+		return fmt.Sprintf("%dh%02dm", hours, minutes)
+	} else {
+		days := int(totalHours / 24)
+		hours := int(totalHours) % 24
+		minutes := int(math.Round((float64(totalHours) - float64(days*24+hours)) * 60))
+		return fmt.Sprintf("%dd%02dh%02dm", days, hours, minutes)
+	}
 }
 
 func summary(offset string, head int) {
-	println(offset)
 	records, err := readRecords(-1)
 	if err != nil {
 		log.Fatal(err)
@@ -213,15 +118,46 @@ func summary(offset string, head int) {
 		log.Fatalf("error calculating duration: %v", err)
 	}
 
-	if head < 1 {
+	if head < 1 || head > len(agg) {
 		head = len(agg)
 	}
 
+	var outFmt string
+	if offset == "day" {
+		outFmt = "%-8s %6s\t%4s\t%6s\n"
+	} else {
+		// wider total hours column for week, month, year
+		outFmt = "%-8s %10s\t%4s\t%6s\n"
+	}
+
+	fmt.Printf(outFmt, "Date", "Total", "Days", "Avg")
 	for i := 0; i < head; i++ {
 		a := agg[i]
 		hhmm := hoursToText(a.TotalHours)
-		fmt.Printf("%s: %s hours\n", a.Group, hhmm)
+		ndays := strconv.Itoa(len(a.Dates))
+		avg := hoursToText(a.AverageHours)
+		fmt.Printf(outFmt, a.Group, hhmm, ndays, avg)
 	}
+}
+
+func contains(items []string, item string) bool {
+	for _, it := range items {
+		if it == item {
+			return true
+		}
+	}
+	return false
+}
+
+func unique(items []string) []string {
+
+	out := []string{}
+	for _, it := range items {
+		if !contains(out, it) {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 func calculateDuration(records []Record, period string) ([]AggregatedRecord, error) {
@@ -235,20 +171,20 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 	var labeler func(time.Time) string
 
 	switch period {
-	case "daily":
+	case "day":
 		labeler = func(t time.Time) string {
 			return t.Format("2006-01-02")
 		}
-	case "weekly":
+	case "week":
 		labeler = func(t time.Time) string {
 			year, week := t.ISOWeek()
 			return fmt.Sprintf("%d-W%02d", year, week)
 		}
-	case "monthly":
+	case "month":
 		labeler = func(t time.Time) string {
 			return t.Format("2006-01")
 		}
-	case "yearly":
+	case "year":
 		labeler = func(t time.Time) string {
 			return t.Format("2006")
 		}
@@ -261,6 +197,7 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 	keys := sortedKeys(aggregations)
 	for _, k := range keys {
 		v := aggregations[k]
+		v.Dates = unique(v.Dates)
 		v.AverageHours = v.TotalHours / float64(len(v.Dates))
 		out = append(out, v)
 	}
@@ -457,11 +394,134 @@ func writeRecords(fileName, newLine string) error {
 	return nil
 }
 
+var rootCmd = &cobra.Command{
+	Use:   "takt",
+	Short: "A Command Line Time Tracking Tool",
+}
+
+var checkCmd = &cobra.Command{
+	Use:     "check",
+	Aliases: []string{"c"},
+	Short:   "Check in or out",
+	Run: func(cmd *cobra.Command, args []string) {
+		notes := ""
+		if len(args) > 0 {
+			notes = args[0]
+		}
+		checkAction(fileName, notes)
+	},
+}
+
+var catCmd = &cobra.Command{
+	Use:     "cat",
+	Aliases: []string{"display"},
+	Short:   "Show all records",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		records, err := readRecords(head)
+		if err != nil {
+			log.Fatal(err)
+		}
+		printRecords(records)
+	},
+}
+
+var editCmd = &cobra.Command{
+	Use:     "edit",
+	Aliases: []string{"e"},
+	Short:   "Edit the records file",
+	Run: func(cmd *cobra.Command, args []string) {
+		editor := os.Getenv("EDITOR")
+		edit_cmd := exec.Command(editor, fileName)
+		edit_cmd.Stdin = os.Stdin
+		edit_cmd.Stdout = os.Stdout
+		err := edit_cmd.Run()
+		if err != nil {
+			log.Fatal(err)
+		}
+	},
+}
+
+var dayCmd = &cobra.Command{
+	Use:     "day",
+	Aliases: []string{"d"},
+	Short:   "Daily summary",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("day", head)
+	},
+}
+
+var weekCmd = &cobra.Command{
+	Use:     "week",
+	Aliases: []string{"w"},
+	Short:   "Week to date summary",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("week", head)
+	},
+}
+
+var monthCmd = &cobra.Command{
+	Use:     "month",
+	Aliases: []string{"m"},
+	Short:   "Month to date summary",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("month", head)
+	},
+}
+
+var yearCmd = &cobra.Command{
+	Use:     "year",
+	Aliases: []string{"y"},
+	Short:   "Year to date summary",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("year", head)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(checkCmd)
 	rootCmd.AddCommand(editCmd)
 	rootCmd.AddCommand(catCmd)
-	rootCmd.AddCommand(dailyCmd)
+	rootCmd.AddCommand(dayCmd)
 	rootCmd.AddCommand(weekCmd)
 	rootCmd.AddCommand(monthCmd)
 	rootCmd.AddCommand(yearCmd)
