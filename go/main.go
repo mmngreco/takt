@@ -395,14 +395,16 @@ func writeRecords(fileName, newLine string) error {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "takt",
-	Short: "A Command Line Time Tracking Tool",
+	Use:   "takt [COMMAND] [ARGS]",
+	Short: "CLI Time Tracking Tool",
+	Long:  "This is a simple time tracking tool that allows you to check in and out.",
 }
 
 var checkCmd = &cobra.Command{
-	Use:     "check",
 	Aliases: []string{"c"},
+	Use:     "check [NOTE]",
 	Short:   "Check in or out",
+	Long:    "Check in or out. If NOTE is provided, it will be saved with the record.",
 	Run: func(cmd *cobra.Command, args []string) {
 		notes := ""
 		if len(args) > 0 {
@@ -413,9 +415,10 @@ var checkCmd = &cobra.Command{
 }
 
 var catCmd = &cobra.Command{
-	Use:     "cat",
 	Aliases: []string{"display"},
+	Use:     "cat [HEAD]",
 	Short:   "Show all records",
+	Long:    "Show all records. If HEAD is provided, show the first n records.",
 	Run: func(cmd *cobra.Command, args []string) {
 		head := -1 // read all records
 		var err error
@@ -430,6 +433,78 @@ var catCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 		printRecords(records)
+	},
+}
+
+var dayCmd = &cobra.Command{
+	Aliases: []string{"d"},
+	Use:     "day [HEAD]",
+	Short:   "Daily summary",
+	Long:    "Daily summary. If HEAD is provided, show the first n records.",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("day", head)
+	},
+}
+
+var weekCmd = &cobra.Command{
+	Aliases: []string{"w"},
+	Use:     "week [HEAD]",
+	Short:   "Week to date summary",
+	Long:    "Week to date summary. If HEAD is provided, show the first n records.",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("week", head)
+	},
+}
+
+var monthCmd = &cobra.Command{
+	Aliases: []string{"m"},
+	Use:     "month [HEAD]",
+	Short:   "Month to date summary",
+	Long:    "Month to date summary. If HEAD is provided, show the first n records.",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("month", head)
+	},
+}
+
+var yearCmd = &cobra.Command{
+	Aliases: []string{"y"},
+	Use:     "year [HEAD]",
+	Short:   "Year to date summary",
+	Long:    "Year to date summary. If HEAD is provided, show the first n records.",
+	Run: func(cmd *cobra.Command, args []string) {
+		head := -1 // read all records
+		var err error
+		if len(args) > 0 {
+			head, err = strconv.Atoi(args[0])
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+		summary("year", head)
 	},
 }
 
@@ -449,82 +524,26 @@ var editCmd = &cobra.Command{
 	},
 }
 
-var dayCmd = &cobra.Command{
-	Use:     "day",
-	Aliases: []string{"d"},
-	Short:   "Daily summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("day", head)
-	},
-}
+var Version = "0.1.0"
 
-var weekCmd = &cobra.Command{
-	Use:     "week",
-	Aliases: []string{"w"},
-	Short:   "Week to date summary",
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "Print the version number of takt",
+	Long:  "Print the version number of takt and exit.",
 	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("week", head)
-	},
-}
-
-var monthCmd = &cobra.Command{
-	Use:     "month",
-	Aliases: []string{"m"},
-	Short:   "Month to date summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("month", head)
-	},
-}
-
-var yearCmd = &cobra.Command{
-	Use:     "year",
-	Aliases: []string{"y"},
-	Short:   "Year to date summary",
-	Run: func(cmd *cobra.Command, args []string) {
-		head := -1 // read all records
-		var err error
-		if len(args) > 0 {
-			head, err = strconv.Atoi(args[0])
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-		summary("year", head)
+		fmt.Println("Version:", Version)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(checkCmd)
-	rootCmd.AddCommand(editCmd)
 	rootCmd.AddCommand(catCmd)
 	rootCmd.AddCommand(dayCmd)
 	rootCmd.AddCommand(weekCmd)
 	rootCmd.AddCommand(monthCmd)
 	rootCmd.AddCommand(yearCmd)
+	rootCmd.AddCommand(editCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func Execute() {
