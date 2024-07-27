@@ -1,42 +1,62 @@
 NAME=takt
 head=5
+bin=./bin/takt
+
+
+$(bin):
+	mkdir -p ./bin
+	go build -o ./bin/$(NAME) main.go
 
 .PHONY: build
-build:
-	go build -o $(NAME)  main.go
+build: $(bin)
 
 .PHONY: all
-all: build
-	cp -f ./$(NAME) ~/.local/bin/$(NAME)
+all: build lint test clear
+	cp -f $(bin) ~/.local/$(bin)
 
 .PHONY: test
 test: build
-	./takt version
+	$(bin) version
 	@sleep 1
 	@echo
-	./takt cat $(head)
+	$(bin) cat $(head)
 	@sleep 1
 	@echo
-	./takt day $(head)
+	$(bin) day $(head)
 	@sleep 1
 	@echo
-	./takt week $(head)
+	$(bin) d $(head)
 	@sleep 1
 	@echo
-	./takt month $(head)
+	$(bin) week $(head)
 	@sleep 1
 	@echo
-	./takt year $(head)
+	$(bin) w $(head)
 	@sleep 1
 	@echo
-	./takt check "deleteMe"
+	$(bin) month $(head)
 	@sleep 1
 	@echo
-	./takt cat $(head)
+	$(bin) m $(head)
+	@sleep 1
+	@echo
+	$(bin) year $(head)
+	@sleep 1
+	@echo
+	$(bin) y $(head)
+	@sleep 1
+	@echo
+	$(bin) check "deleteMe"
+	@sleep 1
+	@echo
+	$(bin) c "deleteMe"
+	@sleep 1
+	@echo
+	$(bin) cat $(head)
 	@sleep 1
 
 
-clean:
+clear:
 	@sed -i '/deleteMe/d' $(shell echo $$TAKT_FILE)
 	cat $(shell echo $$TAKT_FILE)
 

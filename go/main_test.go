@@ -146,32 +146,3 @@ func TestCheckAction(t *testing.T) {
 		t.Errorf("Expected modified file content, but no changes detected \nGot:\n%+v\n\nExpected:\n%+v", gotCsvContentList, csvContent)
 	}
 }
-
-// func TestWriteRecords(t *testing.T) {
-// 	tempFileName := "/tmp/testfile.csv"
-// 	// create file
-// 	_, err := os.Create(tempFileName)
-// 	if err != nil {
-// 		t.Fatalf("Failed to create test file: %v", err)
-// 	}
-// 	defer os.Remove(tempFileName) // cleanup after test
-//
-// 	err = writeRecords(tempFileName, strings.Join(header, ","))
-// 	if err != nil {
-// 		t.Fatalf("writeRecords() error: %v", err)
-// 	}
-// 	err = writeRecords(tempFileName, "2021-01-01T00:00:00Z,in,Test Note")
-// 	if err != nil {
-// 		t.Fatalf("writeRecords() error: %v", err)
-// 	}
-//
-// 	contents, err := os.ReadFile(tempFileName)
-// 	if err != nil {
-// 		t.Fatalf("Failed to read test file: %v", err)
-// 	}
-//
-// 	expected := "timestamp,kind,notes\n2021-01-01T00:00:00Z,in,Test Note\n"
-// 	if string(contents) != expected {
-// 		t.Errorf("File contents expected:\n%s\ngot:\n%s", expected, string(contents))
-// 	}
-// }
