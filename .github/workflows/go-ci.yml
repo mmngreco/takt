@@ -1,0 +1,29 @@
+name: Continuous Integration
+
+on:
+  push:
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: true
+
+      - name: lint
+        run: |-
+          cd go
+          make lint
+
+      - name: test
+        run: |-
+          export TAKT_FILE=data/test.csv
+          cd go
+          make test
