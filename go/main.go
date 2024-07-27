@@ -18,12 +18,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Version = "2024.07.4"
-var fileName = getFileName("TAKT_FILE", "csvfile.csv")
-var header = []string{"timestamp", "kind", "notes"}
+var Version = "2024.07.27"
+var FileName = getFileName("TAKT_FILE", "~/takt.csv")
+var Header = []string{"timestamp", "kind", "notes"}
 
-const timeFormat = time.RFC3339
-const printDateFormat = "2006-01-02"
+const TimeFormat = time.RFC3339
+const DateFormat = "2006-01-02"
 
 type Record struct {
 	Timestamp time.Time
@@ -39,6 +39,80 @@ type AggregatedRecord struct {
 	AverageHours float64
 }
 
+// findGitRoot returns the root of the git repository.
+func findGitRoot() (string, error) {
+	dir := filepath.Dir(FileName)
+	dir, err := filepath.Abs(dir)
+	if err != nil {
+		fmt.Println("Error: couldn't get Abs path")
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir, nil
+		}
+		if dir == "/" {
+			return "", errors.New("not in a git repository")
+		}
+		dir = filepath.Join(dir, "..")
+	}
+}
+
+// gitCommit commits the file to the git repository.
+func gitCommit() error {
+	gitRoot, _ := findGitRoot()
+	gitCmd := exec.Command("git", "-C", gitRoot, "commit", "-m", "Automatic commit from Takt")
+	err := execBashCmd(gitCmd)
+	return err
+}
+
+// gitAdd adds the file to the git repository.
+func gitAdd() error {
+	gitRoot, _ := findGitRoot()
+	dir := filepath.Dir(FileName)
+	dir, err := filepath.Abs(dir)
+	if err != nil {
+		return errors.New("Error: couldn't get abs path")
+	}
+	fileDirRel, err := filepath.Rel(gitRoot, dir)
+	fileNameAbs := filepath.Join(fileDirRel, filepath.Base(FileName))
+
+	if err != nil {
+		return errors.New("Error: couldn't get relative path")
+	}
+	gitCmd := exec.Command("git", "-C", gitRoot, "add", fileNameAbs)
+	err = execBashCmd(gitCmd)
+	return err
+}
+
+// execBashCmd executes a bash command.
+func execBashCmd(cmd *exec.Cmd) error {
+
+	stderr, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		fmt.Print("error= " + err.Error())
+	}
+
+	slurp, _ := io.ReadAll(stderr)
+	if slurp != nil {
+		fmt.Printf("%s\n", slurp)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if e, ok := err.(interface{ ExitCode() int }); ok {
+			if e.ExitCode() != 1 {
+				// exit code is neither zero (as we have an error) or one
+				fmt.Print("error= " + err.Error())
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+// absPath returns the absolute path by expanding the tilde (~) to the user's home directory.
 func absPath(path string) (string, error) {
 	if path[:2] == "~/" {
 		home, err := os.UserHomeDir()
@@ -51,6 +125,7 @@ func absPath(path string) (string, error) {
 	return path, nil
 }
 
+// getFileName returns the file name from the environment variable or the default value.
 func getFileName(key, dflt string) string {
 	path := os.Getenv(key)
 
@@ -69,6 +144,8 @@ func getFileName(key, dflt string) string {
 	return out
 
 }
+
+// sortedKeys returns the keys of a map sorted in descending order.
 func sortedKeys(m map[string]AggregatedRecord) []string {
 	// Crear un slice para las claves
 	keys := make([]string, 0, len(m))
@@ -90,6 +167,7 @@ func sortedKeys(m map[string]AggregatedRecord) []string {
 	return out
 }
 
+// hoursToText converts hours to a human-readable format.
 func hoursToText(totalHours float64) string {
 
 	if totalHours <= 0 {
@@ -106,6 +184,7 @@ func hoursToText(totalHours float64) string {
 	}
 }
 
+// summary prints a summary of the records.
 func summary(offset string, head int) {
 	records, err := readRecords(-1)
 	if err != nil {
@@ -138,6 +217,7 @@ func summary(offset string, head int) {
 	}
 }
 
+// contains returns true if the item is in the slice.
 func contains(items []string, item string) bool {
 	for _, it := range items {
 		if it == item {
@@ -147,6 +227,7 @@ func contains(items []string, item string) bool {
 	return false
 }
 
+// unique returns a slice with unique items.
 func unique(items []string) []string {
 
 	out := []string{}
@@ -158,6 +239,7 @@ func unique(items []string) []string {
 	return out
 }
 
+// calculateDuration calculates the duration of the records.
 func calculateDuration(records []Record, period string) ([]AggregatedRecord, error) {
 	if len(records) == 0 {
 		return nil, errors.New("no records to process")
@@ -202,6 +284,7 @@ func calculateDuration(records []Record, period string) ([]AggregatedRecord, err
 	return out, nil
 }
 
+// aggregateBy aggregates the records by the groupFunc.
 func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]AggregatedRecord {
 	aggregations := make(map[string]AggregatedRecord)
 
@@ -215,14 +298,14 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 
 			if agg, exists := aggregations[groupKey]; exists {
 				agg.TotalHours += duration
-				agg.Dates = append(agg.Dates, record.Timestamp.Format(printDateFormat))
+				agg.Dates = append(agg.Dates, record.Timestamp.Format(DateFormat))
 				agg.Notes = append(agg.Notes, record.Notes)
 				aggregations[groupKey] = agg
 			} else {
 				aggregations[groupKey] = AggregatedRecord{
 					Group:      groupKey,
 					TotalHours: duration,
-					Dates:      []string{record.Timestamp.Format(printDateFormat)},
+					Dates:      []string{record.Timestamp.Format(DateFormat)},
 					Notes:      []string{record.Notes},
 				}
 			}
@@ -233,6 +316,7 @@ func aggregateBy(records []Record, groupFunc func(time.Time) string) map[string]
 	return aggregations
 }
 
+// inferLastOut adds an "out" record at the beginning of the records if the last record is "in".
 func inferLastOut(records *[]Record) int {
 	if len(*records) > 0 && (*records)[0].Kind == "in" {
 		record := []Record{
@@ -248,15 +332,17 @@ func inferLastOut(records *[]Record) int {
 	return 0
 }
 
+// printRecords prints the records.
 func printRecords(records []Record) {
-	fmt.Printf("%-25s %-5s %s\n", header[0], header[1], header[2])
+	fmt.Printf("%-25s %-5s %s\n", Header[0], Header[1], Header[2])
 	for _, record := range records {
-		fmt.Printf("%-25s %-5s %s\n", record.Timestamp.Format(timeFormat), record.Kind, record.Notes)
+		fmt.Printf("%-25s %-5s %s\n", record.Timestamp.Format(TimeFormat), record.Kind, record.Notes)
 	}
 }
 
+// createFile creates a new file with the header.
 func createFile() {
-	file, err := os.Create(fileName)
+	file, err := os.Create(FileName)
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -265,18 +351,17 @@ func createFile() {
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-	if err := writer.Write(header); err != nil {
+	if err := writer.Write(Header); err != nil {
 		fmt.Println("Error:", err)
 	}
 }
 
+// readRecords reads nrows records from the file
 func readRecords(head int) ([]Record, error) {
-	return readRecordsFromFile(fileName, head)
+	return readRecordsFromFile(FileName, head)
 }
 
-// readRecords reads nrows records from the file
-// if nrows is -1, read all records.
-// skip the header.
+// readRecordsFromFile reads nrows records from the file fileName and returns them.
 func readRecordsFromFile(fileName string, head int) ([]Record, error) {
 	if _, err := os.Stat(fileName); os.IsNotExist(err) {
 		createFile()
@@ -316,13 +401,14 @@ func readRecordsFromFile(fileName string, head int) ([]Record, error) {
 		return records, nil
 	}
 	for _, line := range lines[1:] {
-		timestamp, _ := time.Parse(timeFormat, line[0])
+		timestamp, _ := time.Parse(TimeFormat, line[0])
 		records = append(records, Record{timestamp, line[1], line[2]})
 	}
 
 	return records, nil
 }
 
+// checkAction checks in or out.
 func checkAction(filename, notes string) {
 	records, err := readRecordsFromFile(filename, 1)
 	if err != nil {
@@ -337,7 +423,7 @@ func checkAction(filename, notes string) {
 		kind = "out"
 	}
 
-	timestamp := time.Now().Format(timeFormat)
+	timestamp := time.Now().Format(TimeFormat)
 	line := fmt.Sprintf("%s,%s,%s", timestamp, kind, notes)
 	if err := writeRecords(filename, line); err != nil {
 		fmt.Println("Error:", err)
@@ -346,6 +432,7 @@ func checkAction(filename, notes string) {
 	fmt.Printf("Check %s at %s\n", kind, timestamp)
 }
 
+// writeRecords writes a new line to the file.
 func writeRecords(fileName, newLine string) error {
 	prevFile, err := os.Open(fileName)
 	if err != nil {
@@ -362,7 +449,7 @@ func writeRecords(fileName, newLine string) error {
 
 	newWriter := bufio.NewWriter(newFile)
 	defer newWriter.Flush()
-	_, err = newWriter.WriteString(fmt.Sprintf("%s,%s,%s\n", header[0], header[1], header[2]))
+	_, err = newWriter.WriteString(fmt.Sprintf("%s,%s,%s\n", Header[0], Header[1], Header[2]))
 	if err != nil {
 		fmt.Printf("Error: could not write to temp file")
 		return err
@@ -408,7 +495,7 @@ var checkCmd = &cobra.Command{
 		if len(args) > 0 {
 			notes = args[0]
 		}
-		checkAction(fileName, notes)
+		checkAction(FileName, notes)
 	},
 }
 
@@ -512,12 +599,30 @@ var editCmd = &cobra.Command{
 	Short:   "Edit the records file",
 	Run: func(cmd *cobra.Command, args []string) {
 		editor := os.Getenv("EDITOR")
-		edit_cmd := exec.Command(editor, fileName)
+		edit_cmd := exec.Command(editor, FileName)
 		edit_cmd.Stdin = os.Stdin
 		edit_cmd.Stdout = os.Stdout
 		err := edit_cmd.Run()
 		if err != nil {
 			log.Fatal(err)
+		}
+	},
+}
+
+var commitCmd = &cobra.Command{
+	Use:     "commit",
+	Aliases: []string{"cm"},
+	Short:   "Commit the records file",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := gitAdd()
+		if err != nil {
+			fmt.Println("Error: git add failed")
+			return
+		}
+		err = gitCommit()
+		if err != nil {
+			fmt.Println("Error: git commit failed")
+			return
 		}
 	},
 }
@@ -540,6 +645,7 @@ func init() {
 	rootCmd.AddCommand(yearCmd)
 	rootCmd.AddCommand(editCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(commitCmd)
 }
 
 func Execute() {

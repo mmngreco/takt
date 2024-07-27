@@ -12,29 +12,30 @@ all: build
 .PHONY: test
 test: build
 	./takt version
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt cat $(head)
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt day $(head)
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt week $(head)
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt month $(head)
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt year $(head)
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt check "deleteMe"
-	sleep 0.5
+	@sleep 1
 	@echo
 	./takt cat $(head)
-	sleep 0.5
+	@sleep 1
 
 
 clean:
-	sed -i '/deleteMe/d' $(shell echo $$TAKT_FILE)
+	@sed -i '/deleteMe/d' $(shell echo $$TAKT_FILE)
+	cat $(shell echo $$TAKT_FILE)
