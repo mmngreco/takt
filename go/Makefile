@@ -39,3 +39,9 @@ test: build
 clean:
 	@sed -i '/deleteMe/d' $(shell echo $$TAKT_FILE)
 	cat $(shell echo $$TAKT_FILE)
+
+
+lint:
+	go fmt ./...
+	go vet ./...
+	goci-lint

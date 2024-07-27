@@ -94,11 +94,11 @@ func TestReadRecords(t *testing.T) {
 2020-01-01T00:00:00Z,in,Note1
 `
 	// Create test file
-	err := os.WriteFile(fileName, []byte(dummyCSV), 0644)
+	err := os.WriteFile(FileName, []byte(dummyCSV), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create file for testing: %v", err)
 	}
-	defer os.Remove(fileName) // clean up
+	defer os.Remove(FileName) // clean up
 
 	records, err := readRecords(-1)
 	if err != nil {
